@@ -59,6 +59,18 @@
 - Parallel pytest runs share the test DB: run one at a time; CI runs one. No change needed.
 - Push order (owner or Kiro orchestrator): push `main` (M1 + M1.1), confirm CI green; then push `feature/m2-probe-log`, open a PR, CI green, merge. Record both run URLs in Status.
 
+### Planner answers on branches, PRs and release (2026-11-11)
+- Branch model accepted: `feature/*` and `chore/*` -> `develop` (via PR, CI green) -> `main` (release, owner confirms each one). The M2 "push `main` first" instruction is superseded.
+- Merge order: #1 (M1.1) into `develop`. Then run the semantic review on #3 (M2), as M1 and M1.1 had, fix any blocking findings, merge #3. #2 merges only after its fixes below.
+- #2 community docs, required before merge:
+  - Replace `CODE_OF_CONDUCT.md` with the official Contributor Covenant 2.1 text, copied from contributor-covenant.org, not written from memory. Same rule as `LICENSE`: canonical texts are copied, never retyped.
+  - `CONTRIBUTING.md` must match the contributor decision above: outside code contributions are not open until the worker co-op stage; any code accepted before then needs a DCO sign-off (`git commit -s`); add the DCO text (developercertificate.org) as `DCO`. Data contributions are not covered by CONTRIBUTING.
+- Release: after #1, #2 and #3 are in `develop`, merge `develop` -> `main` and tag `v0.2.0` (M1 + M1.1 + M2). Owner confirms before the merge.
+- GitHub settings (owner): make `develop` the default branch; protect `main` and `develop` (PR required, CI check required, no force push).
+- This section and `.kiro/specs/m3-work-zone/` go in one commit on `chore/planner-decisions` off `develop`, merged before #1.
+- Merge style: merge commits (no squash), so the `M<n>-T<k>` history stays; delete branches after merge.
+- Planner edits in the working tree: the planner writes only `docs/DECISIONS.md` and `.kiro/`. The builder commits them in a separate commit `planner: <summary>` before its own work, never with `git commit -a`. The swept-in edits in `8ae1479` are intended and can stay.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
