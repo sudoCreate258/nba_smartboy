@@ -59,5 +59,9 @@
 
 ## Status
 - M1: built (T1–T10). T0 decided (AGPL-3.0-or-later). Baseline verified at M1.1 start: `docker compose exec web pytest` ran 76 passed (earlier figures of 59 and 76 were unverified).
-- M2: spec written (`.kiro/specs/m2-probe-log/`). Not started.
+- M2: built (T0-T8, spec `.kiro/specs/m2-probe-log/`). Verified 2026-11-11: `docker compose exec web pytest` ran 209 passed (M1.1 baseline was 138); `makemigrations --check --dry-run` reports no changes. GitHub Actions run: TBD (orchestrator fills in).
+  - Shipped: T0 housekeeping (admin bad `supersedes` is a form error, DST ambiguous/nonexistent ingest times rejected, SPDX on 0008, `.agents/` ignored); `OMIT_IF_NULL` canonicalization rule with pinned pre-M2 CIDs; `ProbeSession.move_time_cv` (migration 0009); `ProbeBaseline` (migration 0010, no CID); `twin_metrics/probes.py` (plain Python statistics); sleep and work conditions and `kind_report` in `core/services/probe_report.py` (`core/services.py` became the `core/services/` package, imports unchanged); `probe_report` command (text and `--json`); README section.
+  - T0 deviations: `git add --renormalize .` changed nothing (the repo was already LF in the index and working tree). The T0 push of `main` and the first-CI confirmation are done by the orchestrator, not by the builder.
+  - Already correct, tests added only: `record_snapshot` already validated before hashing, so a naive datetime already raised ValidationError.
+  - Open questions for the planner: (1) sleep and work window rules in "Sleep and work conditions" above; (2) multiple `ProbeBaseline` rows per kind: newest `frozen_at` wins, older ones are kept as history; (3) `move_time_cv` is stored as a ratio with 2 decimals (max 999.99), not a percent; confirm the unit; (4) the default baseline is the first 10 sessions even if they span months.
 - M1.1: built (T1-T9, spec `.kiro/specs/m1-1-fixes/`). Verified 2026-11-11: `docker compose exec web pytest` ran 138 passed; `makemigrations --check` reports no changes. Corrections for DailySnapshot, ProbeSession and WorkBlock all record a Supersession. Not pushed; CI has not run on GitHub yet.
