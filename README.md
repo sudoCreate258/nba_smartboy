@@ -138,3 +138,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model, commit style, an
 ## Layout
 
 See `.kiro/steering/tech.md`. Decisions are logged in `docs/DECISIONS.md`.
+
+- `docs/ARCHITECTURE.md`: components, data flow, Nymbus layer mapping, trust boundaries.
+- `docs/DATA_MODEL.md`: every record type, its fields, bounds and CID rules (generated: `python manage.py data_model_doc`).
+- `docs/OPERATIONS.md`: setup, imports, reports, backup and restore, upgrades.
