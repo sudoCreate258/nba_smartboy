@@ -31,6 +31,8 @@ docker compose down      # keeps the pgdata volume
 docker compose down -v   # also deletes the database
 ```
 
+## Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model, commit style, and PR process. Security reports: [SECURITY.md](SECURITY.md).
 ## Layout
 
 See `.kiro/steering/tech.md`. Decisions are logged in `docs/DECISIONS.md`.
