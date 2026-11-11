@@ -9,3 +9,4 @@ staticfiles/
 data/inbox/*
 !data/inbox/.gitkeep
 .agents/
+.planner/
