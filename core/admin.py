@@ -13,6 +13,7 @@ from .models import (
     DiscomfortCheck,
     ProbeBaseline,
     ProbeSession,
+    Reset,
     Supersession,
     WorkBlock,
 )
@@ -134,6 +135,12 @@ class WorkBlockAdmin(CorrectableAdmin):
 class DiscomfortCheckAdmin(CorrectableAdmin):
     list_display = ("at", "area", "score", "trigger", "countermove", "sharp_or_numb", "cid")
     list_filter = ("area", "trigger", "countermove", "sharp_or_numb", "contributor")
+
+
+@admin.register(Reset)
+class ResetAdmin(CorrectableAdmin):
+    list_display = ("at", "kind", "duration_min", "before_probe_cid", "after_probe_cid", "cid")
+    list_filter = ("kind", "contributor")
 
 
 @admin.register(DailySnapshot)

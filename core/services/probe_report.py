@@ -8,7 +8,7 @@ from ..models import DailySnapshot, ProbeBaseline, ProbeSession, WorkBlock
 
 DEFAULT_BASELINE_N = 10
 MAX_DEFAULT_SPAN = datetime.timedelta(days=42)  # a default baseline must fall within 42 days
-SCORED_KINDS = (ProbeSession.Kind.PUZZLE_SET, ProbeSession.Kind.RAPID_GAME)
+SCORED_KINDS = (ProbeSession.Kind.PUZZLE_SET, ProbeSession.Kind.RAPID_GAME, ProbeSession.Kind.MINI_PUZZLE)
 
 
 def current_sessions(contributor, kind):

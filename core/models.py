@@ -334,6 +334,7 @@ class ProbeSession(ProvenancedRecord):
         PUZZLE_SET = "puzzle_set"
         RAPID_GAME = "rapid_game"
         MODULE = "module"
+        MINI_PUZZLE = "mini_puzzle"  # about 5 puzzles between work blocks (M3)
 
     class Location(models.TextChoices):
         OFFICE = "office"
@@ -522,6 +523,60 @@ class DiscomfortCheck(ProvenancedRecord):
 
     def __str__(self):
         return f"{self.area} {self.score} {self.at:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+
+class Reset(ProvenancedRecord):
+    """A short reset between work blocks, bracketed by two mini-probes.
+
+    before_probe_cid / after_probe_cid are plain CID strings (same rule as
+    Supersession). kind "none" is the control condition.
+    """
+
+    record_kind = "reset"
+
+    class Kind(models.TextChoices):
+        WALK = "walk"
+        COLD_SHOWER = "cold_shower"
+        DEAD_HANG_MOBILITY = "dead_hang_mobility"
+        BREATHING = "breathing"
+        NAP = "nap"
+        NONE = "none"
+
+    at = models.DateTimeField()
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    duration_min = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(240)])
+    before_probe_cid = models.CharField(max_length=128, help_text="CID of the mini_puzzle session taken before.")
+    after_probe_cid = models.CharField(max_length=128, help_text="CID of the mini_puzzle session taken after.")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-at"]
+
+    def __str__(self):
+        return f"{self.kind} {self.at:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+    def clean(self):
+        super().clean()
+        if not (self.contributor_id and isinstance(self.at, datetime.datetime)):
+            return
+        errors = {}
+        for name, side in (("before_probe_cid", "before"), ("after_probe_cid", "after")):
+            cid = getattr(self, name)
+            if not cid:
+                continue  # required-field error comes from field validation
+            session = ProbeSession.objects.current().filter(cid=cid).first()
+            if session is None:
+                errors[name] = "Must be the CID of a current probe session."
+            elif session.contributor_id != self.contributor_id:
+                errors[name] = "Must be a probe session of the same contributor."
+            elif session.kind != ProbeSession.Kind.MINI_PUZZLE:
+                errors[name] = "Must be a mini_puzzle session."
+            elif side == "before" and not session.started_at < self.at:
+                errors[name] = "The before probe must start before the reset."
+            elif side == "after" and not session.started_at > self.at:
+                errors[name] = "The after probe must start after the reset."
+        if errors:
+            raise ValidationError(errors)
 
 
 class ProbeBaseline(models.Model):

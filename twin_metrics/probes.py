@@ -18,6 +18,7 @@ METRICS = {
         ("fast_blunders", HIGHER),
         ("move_time_cv", HIGHER),
     ],
+    "mini_puzzle": [("accuracy_pct", LOWER), ("median_solve_s", HIGHER)],
 }
 
 MIN_BASELINE = 10  # sessions in the window, and values per metric

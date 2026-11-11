@@ -45,7 +45,7 @@ def test_text_report_for_a_red_flag(mike):
 def test_text_report_defaults_to_all_scored_kinds_and_handles_empty_kind(mike):
     seed_red(mike)
     out = report()
-    assert "== puzzle_set ==" in out and "== rapid_game ==" in out
+    assert "== puzzle_set ==" in out and "== rapid_game ==" in out and "== mini_puzzle ==" in out
     assert "insufficient baseline (0 of 10 sessions); no flags raised." in out
     assert "== module ==" not in out
     assert out.count(DISCLAIMER) == 1
@@ -69,7 +69,7 @@ def test_json_report(mike):
 def test_json_all_kinds_has_both(mike):
     seed_red(mike)
     data = json.loads(report("--json"))
-    assert [k["kind"] for k in data["kinds"]] == ["puzzle_set", "rapid_game"]
+    assert [k["kind"] for k in data["kinds"]] == ["puzzle_set", "rapid_game", "mini_puzzle"]
     assert data["kinds"][1]["status"] == "insufficient_baseline" and data["kinds"][1]["flag"] == "none"
 
 
