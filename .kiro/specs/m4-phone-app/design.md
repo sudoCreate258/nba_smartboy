@@ -13,3 +13,4 @@
   the first draft of the Nymbus interchange contract.
 - Keep Flutter possible: every page's data also available as JSON at a
   `/api/v0/...` read-only endpoint behind the same login (no write API yet).
+- Module registry: each UI feature is a Django app with a `module.json` manifest (id, version, reads, writes, compute, shares). M4 ships the registry, a Modules page (enable/disable per module) and wraps probes, zone and training as the first three modules. Permission enforcement per category arrives in M5; in M4 a disabled module's pages and jobs are simply off.
