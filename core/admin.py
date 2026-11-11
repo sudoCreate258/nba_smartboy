@@ -3,8 +3,10 @@ from urllib.parse import urlencode
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
-from .models import Contributor, DailySnapshot, ProbeSession, WorkBlock
+from .models import Contributor, DailySnapshot, ProbeSession, Supersession, WorkBlock
 from .services import SKIPPED, SUPERSEDED, record_snapshot
 
 
@@ -24,9 +26,6 @@ class ImmutableAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-    def get_exclude(self, request, obj=None):
-        return None if obj is not None else ("supersedes",)
-
     def save_model(self, request, obj, form, change):
         existing = self.model.objects.filter(cid=obj.compute_cid()).first()
         if existing is not None:
@@ -36,21 +35,63 @@ class ImmutableAdmin(admin.ModelAdmin):
             super().save_model(request, obj, form, change)
 
 
+class CorrectableAdmin(ImmutableAdmin):
+    """Adds "Save as correction": opens the add form prefilled from a record.
+
+    The source CID travels in the `supersedes` query parameter; saving a
+    different record then appends a Supersession from the source to it.
+    """
+
+    actions = ["save_as_correction"]
+
+    @admin.action(description="Save as correction (open add form prefilled)")
+    def save_as_correction(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(request, "Select exactly one record.", messages.ERROR)
+            return None
+        record = queryset.get()
+        initial = {"contributor": record.contributor_id, "supersedes": record.cid}
+        for name, value in record.domain_fields().items():
+            if value is not None:
+                initial[name] = value
+        info = self.model._meta.app_label, self.model._meta.model_name
+        return HttpResponseRedirect(reverse("admin:%s_%s_add" % info) + "?" + urlencode(initial))
+
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        # Query-string datetimes arrive as text; the split widget needs datetime objects.
+        for field in self.model._meta.fields:
+            value = initial.get(field.name)
+            if field.get_internal_type() == "DateTimeField" and isinstance(value, str):
+                parsed = parse_datetime(value)
+                if parsed is not None and timezone.is_aware(parsed):
+                    initial[field.name] = timezone.localtime(parsed)
+        return initial
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        old = self.model.objects.filter(cid=request.GET.get("supersedes", "")).first()
+        if old is None or old.cid == obj.cid:
+            return
+        Supersession.record(old, obj, reason="admin correction")
+        self.message_user(request, "Saved as a correction; the previous record is superseded.")
+
+
 @admin.register(ProbeSession)
-class ProbeSessionAdmin(ImmutableAdmin):
+class ProbeSessionAdmin(CorrectableAdmin):
     list_display = ("started_at", "kind", "accuracy_pct", "location", "cid")
     list_filter = ("kind", "location", "contributor")
 
 
 @admin.register(WorkBlock)
-class WorkBlockAdmin(ImmutableAdmin):
+class WorkBlockAdmin(CorrectableAdmin):
     list_display = ("start", "end", "task_type", "location", "absorption", "effort", "cid")
     list_filter = ("task_type", "location", "contributor")
 
 
 @admin.register(DailySnapshot)
 class DailySnapshotAdmin(ImmutableAdmin):
-    list_display = ("date", "source", "bia_timing", "weight_kg", "sleep_score", "cid", "supersedes")
+    list_display = ("date", "source", "bia_timing", "weight_kg", "sleep_score", "cid")
     list_filter = ("source", "bia_timing", "contributor", "date")
     date_hierarchy = "date"
     actions = ["save_as_correction"]
