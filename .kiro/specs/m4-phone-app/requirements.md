@@ -40,6 +40,8 @@ the home network, on older phones, with no cloud and no app store.
   SameSite=Lax; CSRF on all forms; login rate-limited.
 - HTTPS on the LAN is M6; until then the README warns not to use LAN mode on
   shared or public Wi-Fi.
+- LAN mode refuses to start while `DJANGO_DEBUG` is on; the README says debug
+  is for local development only.
 
 ### R5 "My data" export
 - `python manage.py export_my_data [--contributor mike] [--out file]` and a

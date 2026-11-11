@@ -121,6 +121,12 @@ Program map: Nymbus Program Phase 1 "Techno Rave" (liftoff: capture, store, anal
   4. Health insurance for Chunin implies an employer: decide which entity employs members.
   5. "Kickback" to host governments: call it a revenue share with host communities and define it in the governance documents.
 
+### Owner direction on village governance (2026-11-11)
+- **Data sales happen at village level, not centrally.** A village (local) that sells data has more agency and less hidden resale than a central board (compare local vs state government). Demographic attributes may be used for pricing at village level. Safeguards to design before Nymbus phase 2: each sale approved through the village process, aggregation thresholds (at least 10 people per reported group, as already decided), per-category consent still applies, and a public log of sales per village.
+- **Kage as public face.** Decisions are handled by the Kage rather than put to every user directly; ANBU provide internal checks (internal affairs, compliance, security). The path to Hokage builds in data-management duties. The balance between Kage authority and the worker co-op's democratic votes is defined in the governance documents.
+- **Health insurance and retirement:** aim to partner directly with physicians and medical professionals so a basic package is a standard minimum for members, not a novelty. Likely easier to pilot in Europe or Canada. Needs legal review per country (legal checkpoint 2).
+- **Tag cleanup:** the mistaken `v0.2.0` tag on `73b5e75` is deleted (owner, 2026-11-11).
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
