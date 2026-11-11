@@ -1,0 +1,53 @@
+import datetime
+from decimal import Decimal
+
+from nymbus.provenance import canonical_bytes, compute_cid
+
+FIELDS = {"date": datetime.date(2026, 11, 11), "weight_kg": Decimal("97.8"), "hrv": None}
+
+
+def test_canonical_bytes_exact():
+    assert canonical_bytes("daily_snapshot", "mike", FIELDS) == (
+        b'{"contributor":"mike","fields":{"date":"2026-11-11","hrv":null,'
+        b'"weight_kg":"97.8"},"kind":"daily_snapshot"}'
+    )
+
+
+def test_canonical_bytes_key_order_independent():
+    a = canonical_bytes("k", "mike", {"a": 1, "b": 2})
+    b = canonical_bytes("k", "mike", {"b": 2, "a": 1})
+    assert a == b
+
+
+def test_canonical_bytes_keeps_unicode():
+    assert "é".encode() in canonical_bytes("k", "mike", {"notes": "é"})
+
+
+def test_cid_known_vector():
+    # sha256("") raw CIDv1 is a well-known value.
+    assert compute_cid(b"") == "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku"
+
+
+def test_cid_fixed_record():
+    cid = compute_cid(canonical_bytes("daily_snapshot", "mike", FIELDS))
+    assert cid == "bafkreibxunjeb4sxef7qr6sojcmfpp3tw4ias5xw7yynbhv5qgfvpeiiry"
+
+
+def test_cid_format():
+    cid = compute_cid(b"x")
+    assert cid.startswith("bafkrei")
+    assert cid == cid.lower()
+    assert "=" not in cid
+    assert len(cid) == 59
+
+
+def test_cid_deterministic():
+    d = canonical_bytes("daily_snapshot", "mike", FIELDS)
+    assert compute_cid(d) == compute_cid(d)
+
+
+def test_cid_changes_with_content():
+    base = compute_cid(canonical_bytes("daily_snapshot", "mike", FIELDS))
+    assert base != compute_cid(canonical_bytes("daily_snapshot", "mike", {**FIELDS, "hrv": 41}))
+    assert base != compute_cid(canonical_bytes("daily_snapshot", "other", FIELDS))
+    assert base != compute_cid(canonical_bytes("probe_session", "mike", FIELDS))
