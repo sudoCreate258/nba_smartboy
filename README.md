@@ -83,6 +83,47 @@ Options: `--contributor mike` (default), `--weeks 4` (default), `--until YYYY-MM
 - Discomfort: per week, the mean score per area, how many checks scored 3 or more per trigger, and how often a countermove followed them.
 - The weekly check and the probe flags are shown next to these, never combined into one score.
 
+## Training log
+
+Log strength and conditioning sessions (RP-style programming) so training load can be read next to sleep, probes and the zone. It is a load gauge, not a medical assessment.
+
+**In the admin:** add a Training session (start time, program, mesocycle, mesocycle week, deload, location, session RPE 0-10, optional end time and notes). Its page lists its sets and has an "Add a set to this session" link, which fills in the session CID. Each set has an order number (unique within the session), exercise, muscle group, load in kg (empty for bodyweight), reps, and optionally RIR (reps in reserve, 0-10), pump, soreness before and joint pain (each 0-3), the joint-pain area and notes. Exercise names are stored in lower case with extra spaces removed, so "Bench  Press" and "bench press" are the same. To fix a session or set, use "Save as correction"; sets of a corrected session follow it to the new version.
+
+**From a spreadsheet:** one row per set, with the session columns repeated on every row. Use this header:
+
+```
+started_at,program,mesocycle,meso_week,is_deload,location,session_rpe,order,exercise,muscle_group,load_kg,reps,rir,pump,soreness_before,joint_pain,joint_pain_area,notes
+```
+
+- Required: `started_at`, `order`, `exercise`, `muscle_group`, `reps`. Other cells may be empty, and other columns may be left out. Columns may come in any order; unknown columns are rejected.
+- `started_at`: `2026-11-10 18:00` (local time in your time zone) or with an offset, `2026-11-10T18:00:00-05:00`. Local times that fall in a daylight-saving change (ambiguous or skipped) are rejected; give an offset for those.
+- Rows with the same `started_at` and `program` form one session, and their session columns must match.
+- `is_deload`: `yes`/`no` or `true`/`false` (any case); empty means no.
+- `location`: gym, home or other. `muscle_group`: chest, back, shoulders, biceps, triceps, quads, hamstrings, glutes, calves, abs, forearms, full_body, other. `joint_pain_area`: neck, shoulder, wrist, hip, low_back, other.
+- `notes` is the set's notes. Session notes and the end time are added in the admin.
+- See `tests/fixtures/sample_training.csv` for an example.
+
+Import (save the CSV under `data/inbox/`, which is not committed):
+
+```powershell
+docker compose exec web python manage.py ingest_training_csv data/inbox/training.csv
+```
+
+The whole file is imported or nothing is (the error names the line and column). Importing the same file again, or the same file with new rows added at the end, only adds the new sets.
+
+**Read the report:**
+
+```powershell
+docker compose exec web python manage.py training_report
+docker compose exec web python manage.py training_report --weeks 8 --json
+```
+
+Options: `--contributor mike` (default), `--weeks 4` (default), `--until YYYY-MM-DD` (the last reported week is the whole local week containing this date; default today), `--json`.
+
+- Stop signals first: any set with joint pain of 2 or more ("stop the block; get it checked by a professional"). Earlier ones are counted on one line.
+- Per local week (by session start): sessions, sets, hard sets per muscle group (RIR 3 or less, or RIR not recorded), tonnage (load x reps; bodyweight sets add 0), mean RIR and how many sets recorded it, deload weeks marked, and joint-pain sets (joint pain 1 or more) by area.
+- The JSON output never includes free-text notes.
+
 ## Stop
 
 ```powershell
