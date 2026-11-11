@@ -6,7 +6,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from core.models import DailySnapshot
+from core.models import DailySnapshot, Supersession
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_snapshots.yaml"
 
@@ -83,7 +83,8 @@ def test_changed_value_supersedes(tmp_path):
     out = ingest(write(tmp_path, changed))
     assert "created=0 skipped=1 superseded=1" in out
     new = DailySnapshot.objects.current().get(date=datetime.date(2026, 11, 11))
-    assert new.hrv == 45 and new.supersedes.hrv == 41
+    assert new.hrv == 45
+    assert DailySnapshot.objects.get(cid=Supersession.objects.get().old_cid).hrv == 41
     assert new.cid in out
     assert DailySnapshot.objects.count() == 3
     assert DailySnapshot.objects.current().count() == 2
@@ -105,3 +106,17 @@ def test_missing_required_key(tmp_path):
 def test_bad_yaml_shape(tmp_path):
     with pytest.raises(CommandError):
         ingest(write(tmp_path, "just a string\n"))
+
+
+@pytest.mark.django_db
+def test_revert_via_ingest_records_supersession_only(tmp_path):
+    ingest(FIXTURE)
+    changed = write(tmp_path, FIXTURE.read_text(encoding='utf-8').replace('hrv: 41', 'hrv: 45'))
+    ingest(changed)
+    out = ingest(FIXTURE)
+    assert 'created=0 skipped=1 superseded=1' in out
+    assert DailySnapshot.objects.count() == 3
+    assert Supersession.objects.count() == 2
+    assert DailySnapshot.objects.current().get(date=datetime.date(2026, 11, 11)).hrv == 41
+    assert 'skipped=2' in ingest(FIXTURE)
+

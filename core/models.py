@@ -3,10 +3,11 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import F, OuterRef, Q, Subquery
 
 from nymbus.provenance import canonical_bytes, compute_cid
 
-_NON_CONTENT_FIELDS = {"cid", "contributor", "supersedes", "created_at"}
+_NON_CONTENT_FIELDS = {"cid", "contributor", "created_at"}
 
 
 class ImmutableRecordError(Exception):
@@ -20,11 +21,7 @@ class Contributor(models.Model):
         return self.handle
 
 
-class RecordQuerySet(models.QuerySet):
-    def current(self):
-        """Records that no other record supersedes."""
-        return self.filter(successors__isnull=True)
-
+class AppendOnlyQuerySet(models.QuerySet):
     def update(self, **kwargs):
         raise ImmutableRecordError("Records are immutable; create a superseding record.")
 
@@ -33,6 +30,71 @@ class RecordQuerySet(models.QuerySet):
 
     def delete(self):
         raise ImmutableRecordError("Records are immutable and cannot be deleted.")
+
+
+class RecordQuerySet(AppendOnlyQuerySet):
+    def current(self):
+        """Records that are not superseded.
+
+        A record is current when the most recent Supersession touching its CID
+        (as old or new) points to it, or when no Supersession touches it. A
+        revert (A -> B -> A) therefore makes A current again without a new row.
+        """
+        latest_new = (
+            Supersession.objects.filter(Q(old_cid=OuterRef("cid")) | Q(new_cid=OuterRef("cid")))
+            .order_by("-id")
+            .values("new_cid")[:1]
+        )
+        return self.annotate(_latest_new_cid=Subquery(latest_new)).filter(
+            Q(_latest_new_cid__isnull=True) | Q(_latest_new_cid=F("cid"))
+        )
+
+
+class Supersession(models.Model):
+    """Append-only event: `new_cid` replaces `old_cid` as the current record."""
+
+    old_cid = models.CharField(max_length=128)
+    new_cid = models.CharField(max_length=128)
+    contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
+    reason = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["contributor", "new_cid", "created_at"]),
+            models.Index(fields=["old_cid"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(old_cid=F("new_cid")), name="supersession_old_ne_new"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.old_cid[:12]} -> {self.new_cid[:12]}"
+
+    @classmethod
+    def record(cls, old, new, reason=""):
+        """Append a Supersession from saved record `old` to saved record `new`."""
+        if type(old) is not type(new):
+            raise ValidationError("A record can only supersede one of the same kind.")
+        if old.contributor_id != new.contributor_id:
+            raise ValidationError("A record can only supersede one from the same contributor.")
+        if old.cid == new.cid:
+            raise ValidationError("A record cannot supersede itself.")
+        return cls.objects.create(
+            old_cid=old.cid, new_cid=new.cid, contributor_id=new.contributor_id, reason=reason
+        )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ImmutableRecordError("Supersession events are append-only.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ImmutableRecordError("Supersession events cannot be deleted.")
 
 
 class ProvenancedRecord(models.Model):
@@ -45,13 +107,6 @@ class ProvenancedRecord(models.Model):
 
     cid = models.CharField(max_length=128, unique=True, editable=False)
     contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
-    supersedes = models.ForeignKey(
-        "self",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="successors",
-    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = RecordQuerySet.as_manager()
@@ -80,12 +135,8 @@ class ProvenancedRecord(models.Model):
             canonical_bytes(self.record_kind, self.contributor.handle, self.domain_fields())
         )
 
-    def clean(self):
-        if self.supersedes_id and self.supersedes.contributor_id != self.contributor_id:
-            raise ValidationError("A record can only supersede one from the same contributor.")
-
     def validate(self):
-        """Field and model validation; cid and supersedes are set by the service layer."""
+        """Field and model validation; cid is set on save."""
         # Trailing zeros are not extra precision: Decimal("97.80") is 97.8.
         for field in self._meta.concrete_fields:
             if isinstance(field, models.DecimalField):
@@ -98,7 +149,7 @@ class ProvenancedRecord(models.Model):
                     if value == value.quantize(places):
                         value = value.quantize(places)
                     setattr(self, field.attname, value)
-        self.full_clean(exclude=["cid", "supersedes"], validate_unique=False)
+        self.full_clean(exclude=["cid"], validate_unique=False)
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
@@ -167,8 +218,6 @@ class DailySnapshot(ProvenancedRecord):
 
     def clean(self):
         super().clean()
-        if self.supersedes_id and self.supersedes.date != self.date:
-            raise ValidationError("A correction must have the same date as the snapshot it supersedes.")
         if self.bia_timing == self.BiaTiming.POST_SAUNA:
             set_fields = [
                 f for f in self.BODY_COMPOSITION_FIELDS if getattr(self, f) is not None

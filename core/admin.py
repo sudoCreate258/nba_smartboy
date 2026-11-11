@@ -24,9 +24,6 @@ class ImmutableAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-    def get_exclude(self, request, obj=None):
-        return None if obj is not None else ("supersedes",)
-
     def save_model(self, request, obj, form, change):
         existing = self.model.objects.filter(cid=obj.compute_cid()).first()
         if existing is not None:
@@ -50,7 +47,7 @@ class WorkBlockAdmin(ImmutableAdmin):
 
 @admin.register(DailySnapshot)
 class DailySnapshotAdmin(ImmutableAdmin):
-    list_display = ("date", "source", "bia_timing", "weight_kg", "sleep_score", "cid", "supersedes")
+    list_display = ("date", "source", "bia_timing", "weight_kg", "sleep_score", "cid")
     list_filter = ("source", "bia_timing", "contributor", "date")
     date_hierarchy = "date"
     actions = ["save_as_correction"]
