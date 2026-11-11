@@ -7,6 +7,7 @@ from twin_metrics import probes
 from ..models import DailySnapshot, ProbeBaseline, ProbeSession, WorkBlock
 
 DEFAULT_BASELINE_N = 10
+MAX_DEFAULT_SPAN = datetime.timedelta(days=42)  # a default baseline must fall within 42 days
 SCORED_KINDS = (ProbeSession.Kind.PUZZLE_SET, ProbeSession.Kind.RAPID_GAME)
 
 
@@ -24,9 +25,12 @@ def baseline_window(contributor, kind, sessions=None):
 
     If the owner set a ProbeBaseline (newest frozen_at wins), the baseline is the
     sessions starting inside [start, end] and later sessions start after `end`.
-    Otherwise the baseline is the first DEFAULT_BASELINE_N sessions.
-    Returns {"source", "start", "end", "baseline", "after"}; start/end are None
-    when there are no baseline sessions in a default window.
+    Otherwise the baseline is the first DEFAULT_BASELINE_N sessions, but only if
+    they fall within MAX_DEFAULT_SPAN; if not, "problem" explains that a
+    ProbeBaseline must be set and no flags are raised.
+    Returns {"source", "start", "end", "baseline", "after", "problem"}; start/end
+    are None when there are no baseline sessions in a default window; problem is
+    None when the window is usable.
     """
     if sessions is None:
         sessions = current_sessions(contributor, kind)
@@ -38,14 +42,24 @@ def baseline_window(contributor, kind, sessions=None):
             "end": configured.end,
             "baseline": [s for s in sessions if configured.start <= s.started_at <= configured.end],
             "after": [s for s in sessions if s.started_at > configured.end],
+            "problem": None,
         }
     baseline, after = sessions[:DEFAULT_BASELINE_N], sessions[DEFAULT_BASELINE_N:]
+    problem = None
+    if len(baseline) == DEFAULT_BASELINE_N:
+        span = baseline[-1].started_at - baseline[0].started_at
+        if span > MAX_DEFAULT_SPAN:
+            problem = (
+                f"insufficient baseline: set a ProbeBaseline (the first {DEFAULT_BASELINE_N} sessions "
+                f"span {span.days} days, more than {MAX_DEFAULT_SPAN.days})"
+            )
     return {
         "source": "default",
         "start": baseline[0].started_at if baseline else None,
         "end": baseline[-1].started_at if baseline else None,
         "baseline": baseline,
         "after": after,
+        "problem": problem,
     }
 
 LOAD_DAYS = 3  # days (and nights) behind the sleep and work conditions
@@ -85,12 +99,21 @@ def sleep_falling(contributor, window, latest):
     return {"state": state, "detail": f"last {LOAD_DAYS} nights mean {sum(recent) / len(recent):.1f} vs {len(baseline)} baseline nights"}
 
 
+def merge_intervals(intervals):
+    """Sorted, non-overlapping (start, end) pairs; overlapping or touching pairs are joined."""
+    merged = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
 def _hours_in(blocks, start, end):
-    total = 0.0
-    for b in blocks:
-        overlap = (min(b.end, end) - max(b.start, start)).total_seconds()
-        total += max(overlap, 0.0) / 3600
-    return total
+    """Hours covered by blocks inside [start, end); overlapping blocks are counted once."""
+    clipped = [(max(b.start, start), min(b.end, end)) for b in blocks]
+    return sum((e - s).total_seconds() for s, e in merge_intervals(p for p in clipped if p[1] > p[0])) / 3600
 
 
 def work_rising(contributor, window, latest):
@@ -147,6 +170,7 @@ def kind_report(contributor, kind):
         [session_dict(s) for s in window["after"]],
         sleep_falling=sleep["state"],
         work_rising=work["state"],
+        baseline_problem=window["problem"],
     )
     result.update(
         baseline_source=window["source"],

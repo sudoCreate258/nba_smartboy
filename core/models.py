@@ -424,6 +424,28 @@ class WorkBlock(ProvenancedRecord):
         """Derived, never stored."""
         return self.end - self.start
 
+    # CID of the block this one corrects; set by the correction path so the
+    # correction may overlap the record it replaces. Not a field, not in the CID.
+    replaces_cid = None
+
+    def overlapping(self):
+        """Current blocks of the same contributor that overlap this one (touching is fine).
+
+        Excludes the block being corrected and an identical record (same CID),
+        which is a duplicate, not an overlap.
+        """
+        others = WorkBlock.objects.current().filter(
+            contributor_id=self.contributor_id, start__lt=self.end, end__gt=self.start
+        )
+        if self.pk:
+            others = others.exclude(pk=self.pk)
+        skip = {self.replaces_cid} if self.replaces_cid else set()
+        try:
+            skip.add(self.compute_cid())
+        except (ValidationError, Contributor.DoesNotExist):
+            pass
+        return others.exclude(cid__in=skip)
+
     def clean(self):
         super().clean()
         if self.start and self.end and self.end <= self.start:
@@ -432,6 +454,13 @@ class WorkBlock(ProvenancedRecord):
             value = getattr(self, name)
             if value is not None and not 1 <= value <= 5:
                 raise ValidationError(f"{name} must be between 1 and 5.")
+        if self.contributor_id and isinstance(self.start, datetime.datetime) and isinstance(self.end, datetime.datetime):
+            clash = self.overlapping().first()
+            if clash is not None:
+                raise ValidationError(
+                    f"Overlaps work block {clash.start:%Y-%m-%d %H:%M}-{clash.end:%H:%M} UTC ({clash.cid[:12]}); "
+                    "correct that block instead of adding an overlapping one."
+                )
 
 class ProbeBaseline(models.Model):
     """Owner-set baseline window for one probe kind.

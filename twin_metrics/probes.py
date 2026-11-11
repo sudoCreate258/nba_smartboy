@@ -132,8 +132,13 @@ def deviates(value, baseline_values, worse, k=1.0):
     return gap >= k * sd
 
 
-def evaluate_kind(kind, baseline_sessions, later_sessions, sleep_falling=None, work_rising=None):
-    """Full result for one probe kind from plain-dict sessions (oldest first)."""
+def evaluate_kind(kind, baseline_sessions, later_sessions, sleep_falling=None, work_rising=None,
+                  baseline_problem=None):
+    """Full result for one probe kind from plain-dict sessions (oldest first).
+
+    baseline_problem: text explaining why the baseline window cannot be used
+    (for example a default window spread over too many days); no flags are raised.
+    """
     metrics = METRICS[kind]
     result = {
         "kind": kind,
@@ -146,6 +151,10 @@ def evaluate_kind(kind, baseline_sessions, later_sessions, sleep_falling=None, w
         "level": "none",
         "reasons": [],
     }
+    if baseline_problem:
+        result["status"] = "insufficient_baseline"
+        result["reasons"] = [baseline_problem]
+        return result
     if len(baseline_sessions) < MIN_BASELINE:
         result["status"] = "insufficient_baseline"
         result["reasons"] = [f"insufficient baseline: {len(baseline_sessions)} of {MIN_BASELINE} sessions"]
