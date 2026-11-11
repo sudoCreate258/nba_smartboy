@@ -5,13 +5,13 @@ import pytest
 
 from nymbus.provenance import canonical_bytes, compute_cid
 
-FIELDS = {"date": datetime.date(2026, 11, 11), "weight_kg": Decimal("97.8"), "hrv": None}
+FIELDS = {"date": datetime.date(2026, 11, 11), "weight_kg": Decimal("70.0"), "hrv": None}
 
 
 def test_canonical_bytes_exact():
     assert canonical_bytes("daily_snapshot", "mike", FIELDS) == (
         b'{"contributor":"mike","fields":{"date":"2026-11-11","hrv":null,'
-        b'"weight_kg":"97.8"},"kind":"daily_snapshot"}'
+        b'"weight_kg":"70.0"},"kind":"daily_snapshot"}'
     )
 
 
@@ -31,8 +31,9 @@ def test_cid_known_vector():
 
 
 def test_cid_fixed_record():
+    # Pin updated in the synthetic-fixture commit (planner 013): the fields changed, the algorithm did not.
     cid = compute_cid(canonical_bytes("daily_snapshot", "mike", FIELDS))
-    assert cid == "bafkreibxunjeb4sxef7qr6sojcmfpp3tw4ias5xw7yynbhv5qgfvpeiiry"
+    assert cid == "bafkreigxku4er6ixo4eraxom5fk2hsuehrecwigzp2qa5vmpuyrubvabqa"
 
 
 def test_cid_format():
