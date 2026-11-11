@@ -138,6 +138,11 @@ Choices the spec left open. Owner or planner may overrule.
 - **WeeklyCheck score:** decimal (2 places), because some instruments report a mean rather than a whole-number total; `0 <= score <= scale_max`.
 - **mini_puzzle** is a scored kind in `probe_report` like the others (own baseline, same flag rules); `zone_report` lists every kind's probe flag.
 
+### Planner answers to M3 (2026-11-11)
+- M3 builder choices accepted.
+- Demographic pricing (owner clarification): its purpose is to put a tangible value on data from different groups to see where costs can be cut or optimized. It runs only on aggregates (at least 10 people per group), never on individual-level demographic records.
+- v0.2.0 = `main` at `b22e433` (PR #5). Tagged by the owner.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
