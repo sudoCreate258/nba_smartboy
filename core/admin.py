@@ -118,8 +118,8 @@ class ProbeBaselineAdmin(admin.ModelAdmin):
 
 @admin.register(WorkBlock)
 class WorkBlockAdmin(CorrectableAdmin):
-    list_display = ("start", "end", "task_type", "location", "absorption", "effort", "cid")
-    list_filter = ("task_type", "location", "contributor")
+    list_display = ("start", "end", "task_type", "location", "posture", "planned_length_min", "absorption", "effort", "cid")
+    list_filter = ("task_type", "location", "posture", "contributor")
 
 
 @admin.register(DailySnapshot)
