@@ -7,7 +7,7 @@
 - [x] T4. `nymbus/provenance.py` (canonical bytes + CIDv1) with unit tests: determinism, change-sensitivity, fixed expected CIDs, format (`b` prefix, base32). _(R3)_
 - [x] T5. `Contributor` + data migration for `mike`; abstract `ProvenancedRecord` with immutability and supersede chain. Tests. _(R2, R3)_
 - [x] T6. `DailySnapshot` + admin (read-only, "Save as correction") + post-sauna validation. Tests. _(R4)_
-- [ ] T7. `ProbeSession`, `WorkBlock` + admin; WorkBlock validation. Tests. _(R5, R6)_
+- [x] T7. `ProbeSession`, `WorkBlock` + admin; WorkBlock validation. Tests. _(R5, R6)_
 - [ ] T8. `ingest_yaml` command: atomic, unknown-key rollback, CID skip, supersede on change, summary output. Tests with a sample YAML fixture. _(R7)_
 - [ ] T9. GitHub Actions CI with postgres service; badge in README. _(R8)_
 - [ ] T10. Write the M1 status into `docs/DECISIONS.md` (shipped / issues / open questions) for the planner.

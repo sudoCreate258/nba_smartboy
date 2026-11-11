@@ -7,7 +7,7 @@ from core.models import Contributor, ImmutableRecordError, ProvenancedRecord
 class Dummy(ProvenancedRecord):
     """Concrete stand-in to test the abstract base without a real model."""
 
-    kind = "dummy"
+    record_kind = "dummy"
     value = models.IntegerField(null=True)
 
     class Meta:

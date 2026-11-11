@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from nymbus.provenance import canonical_bytes, compute_cid
@@ -28,10 +29,10 @@ class RecordQuerySet(models.QuerySet):
 class ProvenancedRecord(models.Model):
     """Abstract base: immutable record keyed by a CID over its canonical content.
 
-    Subclasses set `kind` and implement `domain_fields()`.
+    Subclasses set `record_kind` and implement `domain_fields()`.
     """
 
-    kind = ""
+    record_kind = ""
 
     cid = models.CharField(max_length=128, unique=True, editable=False)
     contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
@@ -67,7 +68,7 @@ class ProvenancedRecord(models.Model):
 
     def compute_cid(self):
         return compute_cid(
-            canonical_bytes(self.kind, self.contributor.handle, self.domain_fields())
+            canonical_bytes(self.record_kind, self.contributor.handle, self.domain_fields())
         )
 
     def save(self, *args, **kwargs):
@@ -81,7 +82,7 @@ class ProvenancedRecord(models.Model):
 
 
 class DailySnapshot(ProvenancedRecord):
-    kind = "daily_snapshot"
+    record_kind = "daily_snapshot"
 
     class BiaTiming(models.TextChoices):
         PRE_SESSION = "pre_session"
@@ -132,6 +133,104 @@ class DailySnapshot(ProvenancedRecord):
                     "Post-sauna BIA readings are invalid; body composition must be "
                     f"empty (set: {', '.join(set_fields)})."
                 )
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            self.clean()
+        super().save(*args, **kwargs)
+
+
+class ProbeSession(ProvenancedRecord):
+    record_kind = "probe_session"
+
+    class Kind(models.TextChoices):
+        PUZZLE_SET = "puzzle_set"
+        RAPID_GAME = "rapid_game"
+        MODULE = "module"
+
+    class Location(models.TextChoices):
+        OFFICE = "office"
+        REMOTE = "remote"
+        OTHER = "other"
+
+    started_at = models.DateTimeField()
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    time_control = models.CharField(max_length=32, null=True, blank=True)
+    n_items = models.PositiveSmallIntegerField(null=True, blank=True)
+    accuracy_pct = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    median_solve_s = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
+    blunders = models.PositiveSmallIntegerField(null=True, blank=True)
+    late_blunders = models.PositiveSmallIntegerField(null=True, blank=True)
+    fast_blunders = models.PositiveSmallIntegerField(null=True, blank=True)
+    opponent_rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    own_rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=16, choices=Location.choices, null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"{self.kind} {self.started_at:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+
+class WorkBlock(ProvenancedRecord):
+    record_kind = "work_block"
+
+    class TaskType(models.TextChoices):
+        CODE = "code"
+        MEETING = "meeting"
+        ADMIN = "admin"
+        STUDY = "study"
+        OTHER = "other"
+
+    class Location(models.TextChoices):
+        OFFICE = "office"
+        REMOTE = "remote"
+        COMMUTE = "commute"
+
+    start = models.DateTimeField()
+    end = models.DateTimeField()
+    task_type = models.CharField(max_length=16, choices=TaskType.choices)
+    location = models.CharField(max_length=16, choices=Location.choices, null=True, blank=True)
+    interruptions = models.PositiveSmallIntegerField(null=True, blank=True)
+    absorption = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    effort = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-start"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(end__gt=models.F("start")), name="workblock_end_after_start"),
+            models.CheckConstraint(
+                condition=models.Q(absorption__isnull=True) | models.Q(absorption__range=(1, 5)),
+                name="workblock_absorption_1_5",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(effort__isnull=True) | models.Q(effort__range=(1, 5)),
+                name="workblock_effort_1_5",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.task_type} {self.start:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+    @property
+    def duration(self):
+        """Derived, never stored."""
+        return self.end - self.start
+
+    def clean(self):
+        if self.start and self.end and self.end <= self.start:
+            raise ValidationError("end must be after start.")
+        for name in ("absorption", "effort"):
+            value = getattr(self, name)
+            if value is not None and not 1 <= value <= 5:
+                raise ValidationError(f"{name} must be between 1 and 5.")
 
     def save(self, *args, **kwargs):
         if self._state.adding:
