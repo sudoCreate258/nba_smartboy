@@ -5,16 +5,8 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from core.models import Contributor
+from core.services.common import DISCLAIMER, STOP_TEXT, iso_default
 from core.services.zone_report import zone_report
-
-DISCLAIMER = "Load gauge, not a medical assessment."
-STOP_TEXT = "stop the block; get it checked by a professional"
-
-
-def _iso(value):
-    if isinstance(value, (datetime.date, datetime.datetime)):
-        return value.isoformat()
-    raise TypeError(f"Not JSON serializable: {type(value).__name__}")
 
 
 def jsonable(report, contributor):
@@ -159,6 +151,6 @@ class Command(BaseCommand):
             raise CommandError(f"Unknown contributor: {contributor}")
         item = jsonable(zone_report(who, weeks=weeks, until=until), who)
         if as_json:
-            self.stdout.write(json.dumps(item, indent=2, default=_iso))
+            self.stdout.write(json.dumps(item, indent=2, default=iso_default))
         else:
             self.stdout.write(render_text(item))

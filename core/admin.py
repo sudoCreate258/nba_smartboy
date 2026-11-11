@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html, format_html_join
 from django.utils.dateparse import parse_datetime
 
 from .models import (
@@ -15,10 +16,13 @@ from .models import (
     ProbeSession,
     Reset,
     Supersession,
+    TrainingSession,
+    TrainingSet,
     WeeklyCheck,
     WorkBlock,
 )
 from .services import SKIPPED, SUPERSEDED, record_snapshot
+from .services.training_report import current_session_for, sets_of
 
 
 @admin.register(Contributor)
@@ -148,6 +152,59 @@ class ResetAdmin(CorrectableAdmin):
 class WeeklyCheckAdmin(CorrectableAdmin):
     list_display = ("week_start", "instrument", "score", "scale_max", "cid")
     list_filter = ("instrument", "contributor")
+
+
+@admin.register(TrainingSession)
+class TrainingSessionAdmin(CorrectableAdmin):
+    list_display = ("started_at", "program", "mesocycle", "meso_week", "is_deload", "location", "session_rpe", "cid")
+    list_filter = ("is_deload", "location", "program", "contributor")
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        return fields + ["sets"] if obj is not None else fields
+
+    @admin.display(description="Sets")
+    def sets(self, obj):
+        """Sets reference the session by CID (not a foreign key), so they are listed here
+        read-only with links to add or correct a set. Sets attached to earlier versions
+        of a corrected session are listed under its current version."""
+        if not TrainingSession.objects.current().filter(pk=obj.pk).exists():
+            current = current_session_for(obj.cid, obj.contributor)
+            if current is None:
+                return "This session was corrected; its current version could not be found."
+            return format_html(
+                'This session was corrected. Its sets are listed on the <a href="{}">current version</a>.',
+                reverse("admin:core_trainingsession_change", args=[current.pk]),
+            )
+        rows = sets_of(obj).order_by("order", "cid")
+        add_url = reverse("admin:core_trainingset_add") + "?" + urlencode(
+            {"contributor": obj.contributor_id, "session_cid": obj.cid}
+        )
+        body = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td>"
+            '<td><a href="{}">view / correct</a></td></tr>',
+            (
+                (s.order, s.exercise, s.muscle_group, "" if s.load_kg is None else s.load_kg, s.reps,
+                 "" if s.rir is None else s.rir, "" if s.joint_pain is None else s.joint_pain,
+                 reverse("admin:core_trainingset_change", args=[s.pk]))
+                for s in rows
+            ),
+        )
+        return format_html(
+            "<table><thead><tr><th>#</th><th>exercise</th><th>muscle</th><th>kg</th><th>reps</th><th>RIR</th>"
+            "<th>joint pain</th><th></th></tr></thead><tbody>{}</tbody></table>"
+            '<p><a href="{}">Add a set to this session</a></p>',
+            body,
+            add_url,
+        )
+
+
+@admin.register(TrainingSet)
+class TrainingSetAdmin(CorrectableAdmin):
+    list_display = ("session_cid", "order", "exercise", "muscle_group", "load_kg", "reps", "rir", "joint_pain", "cid")
+    list_filter = ("muscle_group", "joint_pain", "contributor")
+    search_fields = ("exercise", "session_cid")
 
 
 @admin.register(DailySnapshot)

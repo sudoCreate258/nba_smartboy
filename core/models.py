@@ -127,6 +127,48 @@ class Supersession(models.Model):
         raise ImmutableRecordError("Supersession events cannot be deleted.")
 
 
+MAX_CHAIN = 50  # guard when following correction chains
+
+
+class Lineage:
+    """Correction chains of one contributor, loaded once, followed in memory.
+
+    A record's "lineage" is every CID whose chain of corrections ends at the same
+    current record. Records that point to another record by CID (sets to their
+    session, resets to their probes) use it so that correcting the target does
+    not orphan what points to it.
+    """
+
+    def __init__(self, contributor_id):
+        self.next = dict(
+            Supersession.objects.filter(contributor_id=contributor_id).order_by("id").values_list("old_cid", "new_cid")
+        )  # later events win
+
+    def resolve(self, cid, current_cids):
+        """The CID in current_cids that cid's chain ends at, or None."""
+        for _ in range(MAX_CHAIN):
+            if cid in current_cids:
+                return cid
+            if cid not in self.next:
+                return None
+            cid = self.next[cid]
+        return None
+
+    def group(self, current_cids):
+        """{member CID: current CID} for every CID whose chain ends at one of current_cids."""
+        current_cids = set(current_cids)
+        out = {cid: cid for cid in current_cids}
+        for cid in self.next:
+            found = self.resolve(cid, current_cids)
+            if found is not None:
+                out[cid] = found
+        return out
+
+    def members(self, current_cid):
+        """Every CID whose chain ends at current_cid (including itself)."""
+        return set(self.group({current_cid}))
+
+
 class ProvenancedRecord(models.Model):
     """Abstract base: immutable record keyed by a CID over its canonical content.
 
@@ -620,6 +662,150 @@ class WeeklyCheck(ProvenancedRecord):
             return  # field validation reports it
         if score.is_finite() and scale_max.is_finite() and score > scale_max:
             raise ValidationError({"score": "score cannot exceed scale_max."})
+
+
+RATING_0_3 = [MinValueValidator(0), MaxValueValidator(3)]
+
+
+class TrainingSession(ProvenancedRecord):
+    """A strength or conditioning session (RP-style programming fields)."""
+
+    record_kind = "training_session"
+
+    class Location(models.TextChoices):
+        GYM = "gym"
+        HOME = "home"
+        OTHER = "other"
+
+    started_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+    program = models.CharField(max_length=100, blank=True, help_text='Free text, e.g. "RP Hypertrophy".')
+    mesocycle = models.CharField(max_length=100, blank=True)
+    meso_week = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1)])
+    is_deload = models.BooleanField(default=False)
+    location = models.CharField(max_length=8, choices=Location.choices, null=True, blank=True)
+    session_rpe = models.DecimalField(
+        max_digits=3, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        label = self.program or "session"
+        return f"{label} {self.started_at:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+    def clean(self):
+        super().clean()
+        if isinstance(self.started_at, datetime.datetime) and isinstance(self.ended_at, datetime.datetime):
+            if self.ended_at <= self.started_at:
+                raise ValidationError({"ended_at": "ended_at must be after started_at."})
+
+
+def normalize_exercise(value):
+    """Lower case, trimmed, inner whitespace collapsed: "  Bench  Press " -> "bench press"."""
+    return " ".join(value.split()).lower() if isinstance(value, str) else value
+
+
+class TrainingSet(ProvenancedRecord):
+    """One set of a TrainingSession, referenced by the session's CID.
+
+    joint_pain >= 2 is a stop signal (same wording as discomfort).
+    """
+
+    record_kind = "training_set"
+    STOP_JOINT_PAIN = 2
+
+    class MuscleGroup(models.TextChoices):
+        CHEST = "chest"
+        BACK = "back"
+        SHOULDERS = "shoulders"
+        BICEPS = "biceps"
+        TRICEPS = "triceps"
+        QUADS = "quads"
+        HAMSTRINGS = "hamstrings"
+        GLUTES = "glutes"
+        CALVES = "calves"
+        ABS = "abs"
+        FOREARMS = "forearms"
+        FULL_BODY = "full_body"
+        OTHER = "other"
+
+    session_cid = models.CharField(max_length=128, help_text="CID of the TrainingSession.")
+    order = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+    exercise = models.CharField(max_length=100)
+    muscle_group = models.CharField(max_length=12, choices=MuscleGroup.choices)
+    load_kg = models.DecimalField(
+        max_digits=5, decimal_places=1, null=True, blank=True, validators=[MinValueValidator(0)]
+    )
+    reps = models.PositiveSmallIntegerField(validators=[MaxValueValidator(1000)])
+    rir = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(10)],
+                                           help_text="Reps in reserve.")
+    pump = models.PositiveSmallIntegerField(null=True, blank=True, validators=RATING_0_3)
+    soreness_before = models.PositiveSmallIntegerField(null=True, blank=True, validators=RATING_0_3)
+    joint_pain = models.PositiveSmallIntegerField(null=True, blank=True, validators=RATING_0_3)
+    joint_pain_area = models.CharField(max_length=16, choices=DiscomfortCheck.Area.choices, null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    # CID of the set this one corrects (set by the correction path); not a field.
+    replaces_cid = None
+
+    class Meta:
+        ordering = ["session_cid", "order"]
+
+    def __str__(self):
+        return f"{self.order}. {self.exercise} {self.reps} reps {self.cid[:12]}"
+
+    def normalize(self):
+        self.exercise = normalize_exercise(self.exercise)
+
+    def compute_cid(self):
+        self.normalize()
+        return super().compute_cid()
+
+    def validate(self):
+        self.normalize()
+        super().validate()
+
+    @property
+    def is_stop_signal(self):
+        return self.joint_pain is not None and self.joint_pain >= self.STOP_JOINT_PAIN
+
+    def clean(self):
+        super().clean()
+        if self.joint_pain_area and self.joint_pain is None:
+            raise ValidationError({"joint_pain": "Give a joint pain score (0-3) when a joint-pain area is set."})
+        if not self.contributor_id or not self.session_cid:
+            return
+        session = TrainingSession.objects.current().filter(cid=self.session_cid).first()
+        if session is None:
+            raise ValidationError({"session_cid": "Must be the CID of a current training session."})
+        if session.contributor_id != self.contributor_id:
+            raise ValidationError({"session_cid": "Must be a training session of the same contributor."})
+        if self.order:
+            skip = {self.replaces_cid} if self.replaces_cid else set()
+            try:
+                skip.add(self.compute_cid())
+            except (ValidationError, Contributor.DoesNotExist):
+                pass
+            # Sets attached to earlier versions of this session belong to it too.
+            lineage = Lineage(self.contributor_id).members(session.cid)
+            clash = (TrainingSet.objects.current()
+                     .filter(session_cid__in=lineage, order=self.order).exclude(cid__in=skip).first())
+            if clash is not None:
+                raise ValidationError(
+                    {"order": f"Set {self.order} already exists in this session ({clash.cid[:12]}); correct it instead."}
+                )
+
+    def save(self, *args, **kwargs):
+        """Serializes the order check and insert per contributor (row lock)."""
+        if not self._state.adding:
+            return super().save(*args, **kwargs)  # raises ImmutableRecordError
+        with transaction.atomic():
+            Contributor.objects.select_for_update().get(pk=self.contributor_id)
+            super().save(*args, **kwargs)
 
 
 class ProbeBaseline(models.Model):

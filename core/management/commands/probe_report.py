@@ -4,9 +4,8 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from core.models import Contributor
+from core.services.common import DISCLAIMER
 from core.services.probe_report import DEFAULT_BASELINE_N, SCORED_KINDS, kind_report
-
-DISCLAIMER = "Load gauge, not a medical assessment."
 
 
 def jsonable(report, contributor):
