@@ -134,6 +134,10 @@ class ProvenancedRecord(models.Model):
     """
 
     record_kind = ""
+    # Fields added after records existed. A null value is left out of the canonical
+    # content, so records created before the field keep their CID. Any future nullable
+    # field must be listed here (see DECISIONS, "Canonicalization of new nullable fields").
+    OMIT_IF_NULL = ()
 
     cid = models.CharField(max_length=128, unique=True, editable=False)
     contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
@@ -157,6 +161,8 @@ class ProvenancedRecord(models.Model):
             value = field.to_python(getattr(self, field.attname))
             if isinstance(value, Decimal):
                 value = quantize_decimal(field, value)
+            if value is None and field.name in self.OMIT_IF_NULL:
+                continue
             out[field.name] = value
         return out
 
@@ -322,6 +328,7 @@ class DailySnapshot(ProvenancedRecord):
 
 class ProbeSession(ProvenancedRecord):
     record_kind = "probe_session"
+    OMIT_IF_NULL = ("move_time_cv",)
 
     class Kind(models.TextChoices):
         PUZZLE_SET = "puzzle_set"
@@ -346,6 +353,9 @@ class ProbeSession(ProvenancedRecord):
     fast_blunders = models.PositiveSmallIntegerField(null=True, blank=True)
     opponent_rating = models.PositiveSmallIntegerField(null=True, blank=True)
     own_rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    move_time_cv = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)]
+    )
     location = models.CharField(max_length=16, choices=Location.choices, null=True, blank=True)
     notes = models.TextField(blank=True)
 
@@ -422,3 +432,31 @@ class WorkBlock(ProvenancedRecord):
             value = getattr(self, name)
             if value is not None and not 1 <= value <= 5:
                 raise ValidationError(f"{name} must be between 1 and 5.")
+
+class ProbeBaseline(models.Model):
+    """Owner-set baseline window for one probe kind.
+
+    Configuration, not contributed data: it has no CID and may be edited. The
+    newest `frozen_at` per contributor and kind wins.
+    """
+
+    contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
+    kind = models.CharField(max_length=16, choices=ProbeSession.Kind.choices)
+    start = models.DateTimeField()
+    end = models.DateTimeField()
+    frozen_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-frozen_at"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(end__gt=models.F("start")), name="probebaseline_end_after_start"),
+        ]
+
+    def __str__(self):
+        return f"{self.contributor} {self.kind} {self.start:%Y-%m-%d} to {self.end:%Y-%m-%d}"
+
+    def clean(self):
+        if self.kind == ProbeSession.Kind.MODULE:
+            raise ValidationError({"kind": "module sessions are not scored, so they have no baseline."})
+        if self.start and self.end and self.end <= self.start:
+            raise ValidationError({"end": "end must be after start."})

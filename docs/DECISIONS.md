@@ -41,6 +41,36 @@
 - Push: yes. Push `main` (after M2-T0) and confirm the first GitHub Actions run is green before M2-T1. Record the run URL in Status. Note: `.git/refs/remotes/origin/main` already exists locally, so check what (if anything) was pushed earlier.
 - Process: combined commits are fine when edits overlap; say so in the message.
 
+### Canonicalization of new nullable fields (builder, M2-T1, 2026-11-11)
+- Chosen: a per-model `OMIT_IF_NULL` tuple on `ProvenancedRecord`. A field listed there is left out of the canonical content while its value is null, and included once set. Fields that existed at creation (all current ones) are not listed, so every existing CID is unchanged.
+- Rejected: omitting all null fields for every record. It would re-hash every stored record (all have some nulls) and break existing CIDs.
+- Rule for later milestones: any nullable field added after records exist must be added to `OMIT_IF_NULL` in the same migration PR. Tests pin two pre-M2 ProbeSession CIDs (`tests/test_canonicalization.py`).
+### Sleep and work conditions (builder, M2-T5, 2026-11-11)
+- Choices the spec left open. Owner or planner may overrule; the code is in `core/services/probe_report.py`.
+- Sleep falling uses the 3 local days ending on the day of the latest session of that kind. All 3 need a current `sleep_score`, otherwise the condition is "insufficient data". Baseline nights are current snapshots dated inside the baseline window; SD is the sample SD of their scores (needs 2 nights and SD > 0).
+- Work rising: hours of current WorkBlocks overlapping the 3 local days ending on the latest session day (blocks are clipped to the window, so midnight-crossing blocks split by local day). Baseline totals are every 3-day window inside the baseline window that holds at least one block. No blocks in the recent 3 days, or fewer than 2 baseline windows with varying totals, is "insufficient data". A day without blocks is never read as zero hours on its own.
+- "Latest session" is the latest current session of the kind being reported.
+### Planner answers to the M2 builder questions (2026-11-11)
+- `OMIT_IF_NULL` rule: accepted. It is now a standing rule for every later migration (see `.kiro/steering/nymbus.md`).
+- Sleep and work windows: accepted as written. "A day without blocks is never read as zero" is right: missing data is not rest.
+- Multiple `ProbeBaseline` rows: newest `frozen_at` wins, older rows kept as history. Accepted.
+- `move_time_cv`: ratio (std/mean of seconds per move), 2 dp. Accepted; label the admin column "ratio".
+- Default baseline spanning months: not accepted. A default baseline is used only if its 10 sessions fall within 42 days; otherwise the kind reports "insufficient baseline: set a ProbeBaseline". In M3-T0.
+- Parallel pytest runs share the test DB: run one at a time; CI runs one. No change needed.
+- Push order (owner or Kiro orchestrator): push `main` (M1 + M1.1), confirm CI green; then push `feature/m2-probe-log`, open a PR, CI green, merge. Record both run URLs in Status.
+
+### Planner answers on branches, PRs and release (2026-11-11)
+- Branch model accepted: `feature/*` and `chore/*` -> `develop` (via PR, CI green) -> `main` (release, owner confirms each one). The M2 "push `main` first" instruction is superseded.
+- Merge order: #1 (M1.1) into `develop`. Then run the semantic review on #3 (M2), as M1 and M1.1 had, fix any blocking findings, merge #3. #2 merges only after its fixes below.
+- #2 community docs, required before merge:
+  - Replace `CODE_OF_CONDUCT.md` with the official Contributor Covenant 2.1 text, copied from contributor-covenant.org, not written from memory. Same rule as `LICENSE`: canonical texts are copied, never retyped.
+  - `CONTRIBUTING.md` must match the contributor decision above: outside code contributions are not open until the worker co-op stage; any code accepted before then needs a DCO sign-off (`git commit -s`); add the DCO text (developercertificate.org) as `DCO`. Data contributions are not covered by CONTRIBUTING.
+- Release: after #1, #2 and #3 are in `develop`, merge `develop` -> `main` and tag `v0.2.0` (M1 + M1.1 + M2). Owner confirms before the merge.
+- GitHub settings (owner): make `develop` the default branch; protect `main` and `develop` (PR required, CI check required, no force push).
+- This section and `.kiro/specs/m3-work-zone/` go in one commit on `chore/planner-decisions` off `develop`, merged before #1.
+- Merge style: merge commits (no squash), so the `M<n>-T<k>` history stays; delete branches after merge.
+- Planner edits in the working tree: the planner writes only `docs/DECISIONS.md` and `.kiro/`. The builder commits them in a separate commit `planner: <summary>` before its own work, never with `git commit -a`. The swept-in edits in `8ae1479` are intended and can stay.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
@@ -49,6 +79,11 @@
 - GitHub remote: `sudoCreate258/nba_smartboy` (private). README badge updated; CI has not run on GitHub yet until the first push.
 
 ## Status
+- M3: spec written (`.kiro/specs/m3-work-zone/`). Not started; starts after the M2 PR is merged.
 - M1: built (T1–T10). T0 decided (AGPL-3.0-or-later). Baseline verified at M1.1 start: `docker compose exec web pytest` ran 76 passed (earlier figures of 59 and 76 were unverified).
-- M2: spec written (`.kiro/specs/m2-probe-log/`). Not started.
+- M2: built (T0-T8, spec `.kiro/specs/m2-probe-log/`). Verified 2026-11-11: `docker compose exec web pytest` ran 209 passed (M1.1 baseline was 138); `makemigrations --check --dry-run` reports no changes. GitHub Actions run: https://github.com/sudoCreate258/nba_smartboy/actions/runs/43067143291.
+  - Shipped: T0 housekeeping (admin bad `supersedes` is a form error, DST ambiguous/nonexistent ingest times rejected, SPDX on 0008, `.agents/` ignored); `OMIT_IF_NULL` canonicalization rule with pinned pre-M2 CIDs; `ProbeSession.move_time_cv` (migration 0009); `ProbeBaseline` (migration 0010, no CID); `twin_metrics/probes.py` (plain Python statistics); sleep and work conditions and `kind_report` in `core/services/probe_report.py` (`core/services.py` became the `core/services/` package, imports unchanged); `probe_report` command (text and `--json`); README section.
+  - T0 deviations: `git add --renormalize .` changed nothing (the repo was already LF in the index and working tree). The T0 push of `main` and the first-CI confirmation are done by the orchestrator, not by the builder.
+  - Already correct, tests added only: `record_snapshot` already validated before hashing, so a naive datetime already raised ValidationError.
+  - Open questions for the planner: (1) sleep and work window rules in "Sleep and work conditions" above; (2) multiple `ProbeBaseline` rows per kind: newest `frozen_at` wins, older ones are kept as history; (3) `move_time_cv` is stored as a ratio with 2 decimals (max 999.99), not a percent; confirm the unit; (4) the default baseline is the first 10 sessions even if they span months.
 - M1.1: built (T1-T9, spec `.kiro/specs/m1-1-fixes/`). Verified 2026-11-11: `docker compose exec web pytest` ran 138 passed; `makemigrations --check` reports no changes. Corrections for DailySnapshot, ProbeSession and WorkBlock all record a Supersession. Not pushed; CI has not run on GitHub yet.
