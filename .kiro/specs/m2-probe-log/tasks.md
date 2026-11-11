@@ -1,7 +1,7 @@
 # M2 Probe Log — Tasks
 
 - [x] T0. Housekeeping (R0): record_snapshot validation order, admin bad-supersedes form error, SPDX on 0008, DST rejection, renormalize line endings, `.agents/` in `.gitignore`. Tests for each code fix. Push `main`; confirm the GitHub Actions run is green and record its URL in DECISIONS Status.
-- [ ] T1. Canonicalization rule for new nullable fields (design "Data"); test that existing CIDs are unchanged. Decision written to DECISIONS.
+- [x] T1. Canonicalization rule for new nullable fields (design "Data"); test that existing CIDs are unchanged. Decision written to DECISIONS.
 - [ ] T2. `ProbeSession.move_time_cv` + migration + admin. _(R1)_
 - [ ] T3. `ProbeBaseline` model + admin; default-window logic. _(R2)_
 - [ ] T4. `twin_metrics/probes.py` with the full synthetic-series unit tests. _(R2–R4, R6)_
