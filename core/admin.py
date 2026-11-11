@@ -7,7 +7,17 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import Contributor, DailySnapshot, ProbeBaseline, ProbeSession, Supersession, WorkBlock
+from .models import (
+    Contributor,
+    DailySnapshot,
+    DiscomfortCheck,
+    ProbeBaseline,
+    ProbeSession,
+    Reset,
+    Supersession,
+    WeeklyCheck,
+    WorkBlock,
+)
 from .services import SKIPPED, SUPERSEDED, record_snapshot
 
 
@@ -85,6 +95,8 @@ class CorrectableAdmin(ImmutableAdmin):
                 contributor = cleaned.get("contributor")
                 if contributor is not None and contributor.pk != old.contributor_id:
                     raise ValidationError("A correction must have the same contributor as the record it supersedes.")
+                # Lets model validation (e.g. WorkBlock overlap) ignore the record being replaced.
+                self.instance.replaces_cid = old.cid
                 return cleaned
 
         return CorrectionForm
@@ -100,8 +112,12 @@ class CorrectableAdmin(ImmutableAdmin):
 
 @admin.register(ProbeSession)
 class ProbeSessionAdmin(CorrectableAdmin):
-    list_display = ("started_at", "kind", "accuracy_pct", "move_time_cv", "location", "cid")
+    list_display = ("started_at", "kind", "accuracy_pct", "move_time_cv_ratio", "location", "cid")
     list_filter = ("kind", "location", "contributor")
+
+    @admin.display(description="move time CV (ratio)", ordering="move_time_cv")
+    def move_time_cv_ratio(self, obj):
+        return obj.move_time_cv
 
 
 @admin.register(ProbeBaseline)
@@ -112,8 +128,26 @@ class ProbeBaselineAdmin(admin.ModelAdmin):
 
 @admin.register(WorkBlock)
 class WorkBlockAdmin(CorrectableAdmin):
-    list_display = ("start", "end", "task_type", "location", "absorption", "effort", "cid")
-    list_filter = ("task_type", "location", "contributor")
+    list_display = ("start", "end", "task_type", "location", "posture", "planned_length_min", "absorption", "effort", "cid")
+    list_filter = ("task_type", "location", "posture", "contributor")
+
+
+@admin.register(DiscomfortCheck)
+class DiscomfortCheckAdmin(CorrectableAdmin):
+    list_display = ("at", "area", "score", "trigger", "countermove", "sharp_or_numb", "cid")
+    list_filter = ("area", "trigger", "countermove", "sharp_or_numb", "contributor")
+
+
+@admin.register(Reset)
+class ResetAdmin(CorrectableAdmin):
+    list_display = ("at", "kind", "duration_min", "before_probe_cid", "after_probe_cid", "cid")
+    list_filter = ("kind", "contributor")
+
+
+@admin.register(WeeklyCheck)
+class WeeklyCheckAdmin(CorrectableAdmin):
+    list_display = ("week_start", "instrument", "score", "scale_max", "cid")
+    list_filter = ("instrument", "contributor")
 
 
 @admin.register(DailySnapshot)
