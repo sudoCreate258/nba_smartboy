@@ -1,4 +1,5 @@
 import datetime
+import zoneinfo
 from decimal import Decimal
 
 import pytest
@@ -10,6 +11,7 @@ from core.models import Contributor, DailySnapshot, ImmutableRecordError, Supers
 from core.services import CREATED, SKIPPED, SUPERSEDED, record_snapshot
 
 D = datetime.date(2026, 11, 11)
+NY = zoneinfo.ZoneInfo("America/New_York")
 
 
 @pytest.fixture
@@ -32,9 +34,10 @@ def test_all_metrics_nullable_and_not_filled(mike):
 
 
 def test_cid_stable_across_float_string_decimal(mike):
-    a = snap(mike, weight_kg=97.8, bedtime="22:54").compute_cid()
-    b = snap(mike, weight_kg="97.8", bedtime=datetime.time(22, 54)).compute_cid()
-    c = snap(mike, weight_kg=Decimal("97.80"), bedtime="22:54").compute_cid()
+    bed = datetime.datetime(2026, 11, 10, 22, 54, tzinfo=NY)
+    a = snap(mike, weight_kg=97.8, bedtime=bed).compute_cid()
+    b = snap(mike, weight_kg="97.8", bedtime=bed.astimezone(datetime.timezone.utc)).compute_cid()
+    c = snap(mike, weight_kg=Decimal("97.80"), bedtime="2026-11-10T22:54:00-05:00").compute_cid()
     assert a == b == c
 
 
@@ -189,4 +192,39 @@ def test_other_date_or_contributor_is_not_blocked(mike):
     other = Contributor.objects.create(handle='other')
     snap(other, hrv=41).save()
     assert DailySnapshot.objects.current().count() == 3
+
+
+
+def test_after_midnight_bedtime_dated_to_wake_day(mike):
+    bed = datetime.datetime(2026, 11, 11, 1, 30, tzinfo=NY)
+    wake = datetime.datetime(2026, 11, 11, 7, 0, tzinfo=NY)
+    s = snap(mike, bedtime=bed, wake_time=wake)
+    s.save()
+    assert s.date == D
+    assert s.bedtime.astimezone(NY).date() == D
+
+
+def test_date_must_equal_wake_time_local_date(mike):
+    # 23:30 New York on Nov 10 is already Nov 11 in UTC; the local date wins.
+    wake = datetime.datetime(2026, 11, 11, 4, 30, tzinfo=datetime.timezone.utc)
+    with pytest.raises(ValidationError) as exc:
+        snap(mike, wake_time=wake).save()
+    assert 'date' in exc.value.message_dict
+    snap(mike, date=D - datetime.timedelta(days=1), wake_time=wake).save()
+
+
+@pytest.mark.parametrize('field', ['bedtime', 'wake_time'])
+def test_naive_datetime_rejected(mike, field):
+    naive = datetime.datetime(2026, 11, 11, 7, 0)
+    with pytest.raises(ValidationError) as exc:
+        snap(mike, **{field: naive}).save()
+    assert field in exc.value.message_dict
+    assert DailySnapshot.objects.count() == 0
+
+
+def test_contributor_timezone_default_and_validation(mike):
+    assert mike.timezone == 'America/New_York'
+    mike.timezone = 'Mars/Olympus'
+    with pytest.raises(ValidationError):
+        mike.full_clean()
 

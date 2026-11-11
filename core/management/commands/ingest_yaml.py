@@ -1,9 +1,11 @@
+import datetime
 from collections import Counter
 
 import yaml
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils.dateparse import parse_datetime
 
 from core.models import Contributor, DailySnapshot
 from core.services import CREATED, SKIPPED, SUPERSEDED, record_snapshot
@@ -14,6 +16,24 @@ ALLOWED_KEYS = {
     if not f.primary_key and f.name not in {"cid", "contributor", "created_at"}
 }
 REQUIRED_KEYS = {"date", "source"}
+DATETIME_KEYS = {
+    f.name for f in DailySnapshot._meta.concrete_fields if f.get_internal_type() == "DateTimeField"
+} - {"created_at"}
+
+
+def localize(value, tz):
+    """Aware datetime in UTC. Offset-less values are read in the contributor's time zone."""
+    if isinstance(value, str):
+        parsed = parse_datetime(value)
+        if parsed is None:
+            raise ValidationError(f"Not a datetime: {value!r}")
+        value = parsed
+    if not isinstance(value, datetime.datetime):
+        raise ValidationError(f"Not a datetime: {value!r}")
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=tz)
+    return value.astimezone(datetime.timezone.utc)
+
 
 
 class Command(BaseCommand):
@@ -35,8 +55,12 @@ class Command(BaseCommand):
         new_cids = []
         with transaction.atomic():  # any error below rolls back the whole file
             for i, item in enumerate(items, start=1):
-                snapshot = DailySnapshot(contributor=contributor_obj, **item)
                 try:
+                    item = {
+                        k: localize(v, contributor_obj.tzinfo) if k in DATETIME_KEYS and v is not None else v
+                        for k, v in item.items()
+                    }
+                    snapshot = DailySnapshot(contributor=contributor_obj, **item)
                     record, outcome = record_snapshot(snapshot)
                 except ValidationError as exc:
                     raise CommandError(f"Record {i}: {'; '.join(exc.messages)}")
