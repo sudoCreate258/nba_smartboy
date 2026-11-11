@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 
-from core.models import Contributor, DailySnapshot, ImmutableRecordError
+from core.models import Contributor, DailySnapshot, ImmutableRecordError, Supersession
 from core.services import CREATED, SKIPPED, SUPERSEDED, record_snapshot
 
 D = datetime.date(2026, 11, 11)
@@ -43,7 +43,7 @@ def test_cid_changes_when_value_changes(mike):
 
 
 def test_cid_ignores_ingest_metadata(mike):
-    # created_at and supersedes are not content
+    # created_at is not content
     a = snap(mike, hrv=41)
     b = snap(mike, hrv=41)
     b.created_at = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
@@ -80,13 +80,14 @@ def test_snapshot_immutable(mike):
 
 def test_service_created_skipped_superseded(mike):
     a, outcome = record_snapshot(snap(mike, hrv=41))
-    assert outcome == CREATED and a.supersedes is None
+    assert outcome == CREATED and not Supersession.objects.exists()
 
     again, outcome = record_snapshot(snap(mike, hrv=41))
     assert outcome == SKIPPED and again.pk == a.pk
 
     b, outcome = record_snapshot(snap(mike, hrv=44))
-    assert outcome == SUPERSEDED and b.supersedes == a
+    assert outcome == SUPERSEDED
+    assert Supersession.objects.get().old_cid == a.cid and Supersession.objects.get().new_cid == b.cid
     assert DailySnapshot.objects.count() == 2
 
 
@@ -139,4 +140,27 @@ def test_admin_add_supersedes_current(admin_client, mike):
     )
     assert resp.status_code == 302
     new = DailySnapshot.objects.current().get(date=D)
-    assert new.hrv == 45 and new.supersedes == s
+    assert new.hrv == 45 and Supersession.objects.get().old_cid == s.cid
+
+
+def test_revert_a_b_a_records_event_without_new_row(mike):
+    a, _ = record_snapshot(snap(mike, hrv=41))
+    b, _ = record_snapshot(snap(mike, hrv=44))
+    again, outcome = record_snapshot(snap(mike, hrv=41))
+    assert outcome == SUPERSEDED and again.pk == a.pk
+    assert DailySnapshot.objects.count() == 2
+    assert [(s.old_cid, s.new_cid) for s in Supersession.objects.order_by('id')] == [
+        (a.cid, b.cid),
+        (b.cid, a.cid),
+    ]
+    assert list(DailySnapshot.objects.current().filter(date=D)) == [a]
+
+
+def test_reingest_of_current_is_noop_after_revert(mike):
+    record_snapshot(snap(mike, hrv=41))
+    record_snapshot(snap(mike, hrv=44))
+    record_snapshot(snap(mike, hrv=41))
+    _, outcome = record_snapshot(snap(mike, hrv=41))
+    assert outcome == SKIPPED
+    assert Supersession.objects.count() == 2
+

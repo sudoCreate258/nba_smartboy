@@ -11,7 +11,7 @@ from core.services import CREATED, SKIPPED, SUPERSEDED, record_snapshot
 ALLOWED_KEYS = {
     f.name
     for f in DailySnapshot._meta.concrete_fields
-    if not f.primary_key and f.name not in {"cid", "contributor", "supersedes", "created_at"}
+    if not f.primary_key and f.name not in {"cid", "contributor", "created_at"}
 }
 REQUIRED_KEYS = {"date", "source"}
 
