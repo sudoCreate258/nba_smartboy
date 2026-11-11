@@ -2,7 +2,7 @@
   source: samsung_health
   bia_timing: pre_session
   sleep_score: 86
-  bedtime: "22:54"
+  bedtime: 2026-11-10 22:54:00
   resting_hr_sleep: 52
   hrv: 41
   weight_kg: 97.8
