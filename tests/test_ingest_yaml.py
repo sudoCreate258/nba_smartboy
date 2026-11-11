@@ -33,7 +33,7 @@ def test_happy_path():
         assert s.contributor.handle == "mike"
     s = DailySnapshot.objects.get(date=datetime.date(2026, 11, 11))
     assert s.bedtime == datetime.datetime(2026, 11, 11, 3, 54, tzinfo=datetime.timezone.utc)
-    assert str(s.weight_kg) == "97.8"
+    assert str(s.weight_kg) == "70.0"
     assert s.wake_time is None and s.spo2 is None
 
 
@@ -167,7 +167,7 @@ def test_non_finite_or_huge_number_names_field_and_rolls_back(tmp_path, bad):
 
 @pytest.mark.django_db
 def test_post_sauna_weight_rejected_on_ingest(tmp_path):
-    p = write(tmp_path, "date: 2026-11-11\nsource: manual\nbia_timing: post_sauna\nweight_kg: 97.8\n")
+    p = write(tmp_path, "date: 2026-11-11\nsource: manual\nbia_timing: post_sauna\nweight_kg: 70.0\n")
     with pytest.raises(CommandError, match="Post-sauna"):
         ingest(p)
     assert DailySnapshot.objects.count() == 0
