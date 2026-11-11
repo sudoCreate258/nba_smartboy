@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F, OuterRef, Q, Subquery
 
 from nymbus.provenance import canonical_bytes, compute_cid
@@ -215,6 +215,37 @@ class DailySnapshot(ProvenancedRecord):
 
     def __str__(self):
         return f"{self.date} {self.source} {self.cid[:12]}"
+
+    def current_for_date(self):
+        """The current snapshot for this contributor and date, or None."""
+        return (
+            type(self)
+            .objects.current()
+            .filter(contributor_id=self.contributor_id, date=self.date)
+            .first()
+        )
+
+    def save(self, *args, supersede=False, reason="", **kwargs):
+        """The only write path for snapshots.
+
+        Takes the contributor-row lock and refuses to create a second current
+        snapshot for the same contributor and date. With supersede=True the new
+        record replaces the current one and a Supersession is recorded.
+        """
+        if not self._state.adding:
+            return super().save(*args, **kwargs)  # raises ImmutableRecordError
+        with transaction.atomic():
+            self.validate()
+            Contributor.objects.select_for_update().get(pk=self.contributor_id)
+            current = self.current_for_date()
+            if current is not None and not supersede:
+                raise ValidationError(
+                    f"A current snapshot already exists for {self.date}; "
+                    "save with supersede=True to replace it."
+                )
+            super().save(*args, **kwargs)
+            if current is not None:
+                Supersession.record(current, self, reason=reason)
 
     def clean(self):
         super().clean()

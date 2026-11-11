@@ -164,3 +164,29 @@ def test_reingest_of_current_is_noop_after_revert(mike):
     assert outcome == SKIPPED
     assert Supersession.objects.count() == 2
 
+
+
+def test_direct_save_cannot_create_second_current_snapshot(mike):
+    snap(mike, hrv=41).save()
+    with pytest.raises(ValidationError):
+        snap(mike, hrv=44).save()
+    assert DailySnapshot.objects.count() == 1
+    assert not Supersession.objects.exists()
+
+
+def test_direct_save_with_supersede_records_event(mike):
+    a = snap(mike, hrv=41)
+    a.save()
+    b = snap(mike, hrv=44)
+    b.save(supersede=True)
+    assert Supersession.objects.get().new_cid == b.cid
+    assert list(DailySnapshot.objects.current().filter(date=D)) == [b]
+
+
+def test_other_date_or_contributor_is_not_blocked(mike):
+    snap(mike, hrv=41).save()
+    snap(mike, date=D + datetime.timedelta(days=1), hrv=41).save()
+    other = Contributor.objects.create(handle='other')
+    snap(other, hrv=41).save()
+    assert DailySnapshot.objects.current().count() == 3
+

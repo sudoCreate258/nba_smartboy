@@ -22,18 +22,12 @@ def record_snapshot(snapshot):
         # the same current snapshot.
         Contributor.objects.select_for_update().get(pk=snapshot.contributor_id)
         cid = snapshot.compute_cid()
-        current = (
-            DailySnapshot.objects.current()
-            .filter(contributor=snapshot.contributor, date=snapshot.date)
-            .first()
-        )
+        current = snapshot.current_for_date()
         existing = DailySnapshot.objects.filter(cid=cid).first()
         if existing is not None:
             if current is None or current.pk == existing.pk:
                 return existing, SKIPPED
             Supersession.record(current, existing, reason="revert")
             return existing, SUPERSEDED
-        snapshot.save()
-        if current is not None:
-            Supersession.record(current, snapshot)
+        snapshot.save(supersede=current is not None)
         return snapshot, SUPERSEDED if current else CREATED
