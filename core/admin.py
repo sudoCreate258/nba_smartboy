@@ -85,6 +85,8 @@ class CorrectableAdmin(ImmutableAdmin):
                 contributor = cleaned.get("contributor")
                 if contributor is not None and contributor.pk != old.contributor_id:
                     raise ValidationError("A correction must have the same contributor as the record it supersedes.")
+                # Lets model validation (e.g. WorkBlock overlap) ignore the record being replaced.
+                self.instance.replaces_cid = old.cid
                 return cleaned
 
         return CorrectionForm
@@ -100,8 +102,12 @@ class CorrectableAdmin(ImmutableAdmin):
 
 @admin.register(ProbeSession)
 class ProbeSessionAdmin(CorrectableAdmin):
-    list_display = ("started_at", "kind", "accuracy_pct", "move_time_cv", "location", "cid")
+    list_display = ("started_at", "kind", "accuracy_pct", "move_time_cv_ratio", "location", "cid")
     list_filter = ("kind", "location", "contributor")
+
+    @admin.display(description="move time CV (ratio)", ordering="move_time_cv")
+    def move_time_cv_ratio(self, obj):
+        return obj.move_time_cv
 
 
 @admin.register(ProbeBaseline)

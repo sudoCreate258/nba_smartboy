@@ -177,7 +177,8 @@ def test_admin_correction_identical_record_writes_nothing(admin_client, mike):
 
 
 def test_admin_correction_action_needs_exactly_one(admin_client, mike):
-    a, b = block(mike), block(mike, task_type="admin")
+    later = T0 + datetime.timedelta(hours=2)  # blocks of one contributor may not overlap
+    a, b = block(mike), block(mike, task_type="admin", start=later, end=later + datetime.timedelta(minutes=30))
     a.save()
     b.save()
     resp = admin_client.post(
