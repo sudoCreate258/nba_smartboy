@@ -148,6 +148,12 @@ Choices the spec left open. Owner or planner may overrule.
 - Camera-based posture/pose tracking (two cameras for 3D) is a later adapter (M7, spec after M4). Rules already decided: video stays on the device and is not stored by default; only derived keypoints become records; library license must be AGPL-compatible.
 - Debug: on for local development only until M4 makes debug-off fully usable.
 
+### Owner direction: cloud storage, modules and local models (2026-11-11)
+- **Cloud storage is a backup target, not the database.** The owner has 1 TB of unused cloud storage (more than local disk). M4.5 adds client-side encrypted backups pushed during off-hours with a bandwidth limit, to a remote the user chooses; first target is Google Drive via rclone (its `crypt` remote encrypts before upload). The remote holds ciphertext only; keys stay local; losing the key loses the backup, so the README covers key backup. PostgreSQL stays the live store.
+- **Off-hours is also when heavy local compute runs** (model training, pose processing), not just uploads. Federated learning is about training without pooling raw data; it is not a storage method.
+- **Modular UI and local models.** Every feature is a module with a manifest: id, version, record kinds it reads (by data category), kinds it writes, compute profile (on-demand or off-hours; CPU/GPU hint), and what it may share. The core enforces the user's per-module, per-category grants (M5 permissions extend to modules). Modules and local models can be added or removed to personalize the experience; a removed module loses access immediately; its outputs stay as records with provenance.
+- **First modules:** probes, zone, training (M3.5), later pose (M7) and Rendez-Vous. This is the seed of the Nymbus module marketplace; the manifest format should move into the Nymbus doc once stable.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
