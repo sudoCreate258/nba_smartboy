@@ -1,30 +1,57 @@
-from decimal import Decimal
+import datetime
+import zoneinfo
+from decimal import Context, Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
+from django.db.models import F, OuterRef, Q, Subquery
+from django.utils import timezone
 
 from nymbus.provenance import canonical_bytes, compute_cid
 
-_NON_CONTENT_FIELDS = {"cid", "contributor", "supersedes", "created_at"}
+_NON_CONTENT_FIELDS = {"cid", "contributor", "created_at"}
+
+
+_WIDE = Context(prec=60)
+
+
+def quantize_decimal(field, value):
+    """Quantize to the field's decimal places; ValidationError naming the field if impossible."""
+    if not value.is_finite():
+        raise ValidationError({field.name: "Must be a finite number."})
+    try:
+        return value.quantize(Decimal(1).scaleb(-field.decimal_places), context=_WIDE)
+    except InvalidOperation:
+        raise ValidationError({field.name: "Number is out of range."})
 
 
 class ImmutableRecordError(Exception):
     """Raised when a saved, CID-keyed record is modified."""
 
 
+def validate_timezone(value):
+    try:
+        zoneinfo.ZoneInfo(value)
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError, OSError):
+        raise ValidationError(f"Unknown time zone: {value!r}")
+
+
 class Contributor(models.Model):
     handle = models.CharField(max_length=64, unique=True)
+    timezone = models.CharField(
+        max_length=64, default="America/New_York", validators=[validate_timezone]
+    )
+
+    @property
+    def tzinfo(self):
+        return zoneinfo.ZoneInfo(self.timezone)
 
     def __str__(self):
         return self.handle
 
 
-class RecordQuerySet(models.QuerySet):
-    def current(self):
-        """Records that no other record supersedes."""
-        return self.filter(successors__isnull=True)
-
+class AppendOnlyQuerySet(models.QuerySet):
     def update(self, **kwargs):
         raise ImmutableRecordError("Records are immutable; create a superseding record.")
 
@@ -35,6 +62,71 @@ class RecordQuerySet(models.QuerySet):
         raise ImmutableRecordError("Records are immutable and cannot be deleted.")
 
 
+class RecordQuerySet(AppendOnlyQuerySet):
+    def current(self):
+        """Records that are not superseded.
+
+        A record is current when the most recent Supersession touching its CID
+        (as old or new) points to it, or when no Supersession touches it. A
+        revert (A -> B -> A) therefore makes A current again without a new row.
+        """
+        latest_new = (
+            Supersession.objects.filter(Q(old_cid=OuterRef("cid")) | Q(new_cid=OuterRef("cid")))
+            .order_by("-id")
+            .values("new_cid")[:1]
+        )
+        return self.annotate(_latest_new_cid=Subquery(latest_new)).filter(
+            Q(_latest_new_cid__isnull=True) | Q(_latest_new_cid=F("cid"))
+        )
+
+
+class Supersession(models.Model):
+    """Append-only event: `new_cid` replaces `old_cid` as the current record."""
+
+    old_cid = models.CharField(max_length=128)
+    new_cid = models.CharField(max_length=128)
+    contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
+    reason = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["contributor", "new_cid", "created_at"]),
+            models.Index(fields=["old_cid"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(old_cid=F("new_cid")), name="supersession_old_ne_new"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.old_cid[:12]} -> {self.new_cid[:12]}"
+
+    @classmethod
+    def record(cls, old, new, reason=""):
+        """Append a Supersession from saved record `old` to saved record `new`."""
+        if type(old) is not type(new):
+            raise ValidationError("A record can only supersede one of the same kind.")
+        if old.contributor_id != new.contributor_id:
+            raise ValidationError("A record can only supersede one from the same contributor.")
+        if old.cid == new.cid:
+            raise ValidationError("A record cannot supersede itself.")
+        return cls.objects.create(
+            old_cid=old.cid, new_cid=new.cid, contributor_id=new.contributor_id, reason=reason
+        )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ImmutableRecordError("Supersession events are append-only.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ImmutableRecordError("Supersession events cannot be deleted.")
+
+
 class ProvenancedRecord(models.Model):
     """Abstract base: immutable record keyed by a CID over its canonical content.
 
@@ -42,16 +134,13 @@ class ProvenancedRecord(models.Model):
     """
 
     record_kind = ""
+    # Fields added after records existed. A null value is left out of the canonical
+    # content, so records created before the field keep their CID. Any future nullable
+    # field must be listed here (see DECISIONS, "Canonicalization of new nullable fields").
+    OMIT_IF_NULL = ()
 
     cid = models.CharField(max_length=128, unique=True, editable=False)
     contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
-    supersedes = models.ForeignKey(
-        "self",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="successors",
-    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = RecordQuerySet.as_manager()
@@ -71,7 +160,9 @@ class ProvenancedRecord(models.Model):
                 continue
             value = field.to_python(getattr(self, field.attname))
             if isinstance(value, Decimal):
-                value = value.quantize(Decimal(1).scaleb(-field.decimal_places))
+                value = quantize_decimal(field, value)
+            if value is None and field.name in self.OMIT_IF_NULL:
+                continue
             out[field.name] = value
         return out
 
@@ -81,24 +172,29 @@ class ProvenancedRecord(models.Model):
         )
 
     def clean(self):
-        if self.supersedes_id and self.supersedes.contributor_id != self.contributor_id:
-            raise ValidationError("A record can only supersede one from the same contributor.")
+        for field in self._meta.concrete_fields:
+            if isinstance(field, models.DateTimeField) and field.name != "created_at":
+                value = getattr(self, field.attname)
+                if isinstance(value, datetime.datetime) and timezone.is_naive(value):
+                    raise ValidationError({field.name: "Naive datetimes are not allowed; include a time zone."})
 
     def validate(self):
-        """Field and model validation; cid and supersedes are set by the service layer."""
+        """Field and model validation; cid is set on save."""
         # Trailing zeros are not extra precision: Decimal("97.80") is 97.8.
+        errors = {}
         for field in self._meta.concrete_fields:
             if isinstance(field, models.DecimalField):
                 try:
                     value = field.to_python(getattr(self, field.attname))
-                except ValidationError:
-                    continue  # reported by full_clean below
-                if isinstance(value, Decimal) and value.is_finite():
-                    places = Decimal(1).scaleb(-field.decimal_places)
-                    if value == value.quantize(places):
-                        value = value.quantize(places)
-                    setattr(self, field.attname, value)
-        self.full_clean(exclude=["cid", "supersedes"], validate_unique=False)
+                    if isinstance(value, Decimal):
+                        quantized = quantize_decimal(field, value)
+                        if value == quantized:
+                            setattr(self, field.attname, quantized)
+                except ValidationError as exc:
+                    errors.update(exc.message_dict if hasattr(exc, "error_dict") else {field.name: exc.messages})
+        if errors:
+            raise ValidationError(errors)
+        self.full_clean(exclude=["cid"], validate_unique=False)
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
@@ -131,21 +227,31 @@ class DailySnapshot(ProvenancedRecord):
         MANUAL = "manual"
 
     # Body-composition readings that a post-sauna BIA makes invalid.
-    BODY_COMPOSITION_FIELDS = ("body_fat_pct", "skeletal_muscle_kg", "bmr_kcal")
+    BODY_COMPOSITION_FIELDS = ("weight_kg", "body_fat_pct", "skeletal_muscle_kg", "bmr_kcal")
 
     date = models.DateField()
     sleep_score = models.PositiveSmallIntegerField(null=True, blank=True, validators=PCT)
-    bedtime = models.TimeField(null=True, blank=True)
-    wake_time = models.TimeField(null=True, blank=True)
+    bedtime = models.DateTimeField(null=True, blank=True)
+    wake_time = models.DateTimeField(null=True, blank=True)
     sleep_duration_min = models.PositiveSmallIntegerField(
         null=True, blank=True, validators=[MaxValueValidator(1440)]
     )
-    resting_hr_sleep = models.PositiveSmallIntegerField(null=True, blank=True)
-    hrv = models.PositiveSmallIntegerField(null=True, blank=True)
+    resting_hr_sleep = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(20), MaxValueValidator(150)]
+    )
+    hrv = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(300)]
+    )
     spo2 = models.DecimalField(
         max_digits=4, decimal_places=1, null=True, blank=True, validators=PCT
     )
-    weight_kg = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    weight_kg = models.DecimalField(
+        max_digits=5,
+        decimal_places=1,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(30), MaxValueValidator(300)],
+    )
     body_fat_pct = models.DecimalField(
         max_digits=4, decimal_places=1, null=True, blank=True, validators=PCT
     )
@@ -165,10 +271,50 @@ class DailySnapshot(ProvenancedRecord):
     def __str__(self):
         return f"{self.date} {self.source} {self.cid[:12]}"
 
+    def current_for_date(self):
+        """The current snapshot for this contributor and date, or None."""
+        return (
+            type(self)
+            .objects.current()
+            .filter(contributor_id=self.contributor_id, date=self.date)
+            .first()
+        )
+
+    def save(self, *args, supersede=False, reason="", **kwargs):
+        """The only write path for snapshots.
+
+        Takes the contributor-row lock and refuses to create a second current
+        snapshot for the same contributor and date. With supersede=True the new
+        record replaces the current one and a Supersession is recorded.
+        """
+        if not self._state.adding:
+            return super().save(*args, **kwargs)  # raises ImmutableRecordError
+        with transaction.atomic():
+            self.validate()
+            Contributor.objects.select_for_update().get(pk=self.contributor_id)
+            current = self.current_for_date()
+            if current is not None and not supersede:
+                raise ValidationError(
+                    f"A current snapshot already exists for {self.date}; "
+                    "save with supersede=True to replace it."
+                )
+            super().save(*args, **kwargs)
+            if current is not None:
+                Supersession.record(current, self, reason=reason)
+
     def clean(self):
         super().clean()
-        if self.supersedes_id and self.supersedes.date != self.date:
-            raise ValidationError("A correction must have the same date as the snapshot it supersedes.")
+        if (
+            self.contributor_id
+            and isinstance(self.date, datetime.date)
+            and isinstance(self.wake_time, datetime.datetime)
+            and timezone.is_aware(self.wake_time)
+        ):
+            local_date = self.wake_time.astimezone(self.contributor.tzinfo).date()
+            if self.date != local_date:
+                raise ValidationError(
+                    {"date": f"date must be the wake_time date in {self.contributor.timezone} ({local_date})."}
+                )
         if self.bia_timing == self.BiaTiming.POST_SAUNA:
             set_fields = [
                 f for f in self.BODY_COMPOSITION_FIELDS if getattr(self, f) is not None
@@ -182,6 +328,7 @@ class DailySnapshot(ProvenancedRecord):
 
 class ProbeSession(ProvenancedRecord):
     record_kind = "probe_session"
+    OMIT_IF_NULL = ("move_time_cv",)
 
     class Kind(models.TextChoices):
         PUZZLE_SET = "puzzle_set"
@@ -206,6 +353,9 @@ class ProbeSession(ProvenancedRecord):
     fast_blunders = models.PositiveSmallIntegerField(null=True, blank=True)
     opponent_rating = models.PositiveSmallIntegerField(null=True, blank=True)
     own_rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    move_time_cv = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)]
+    )
     location = models.CharField(max_length=16, choices=Location.choices, null=True, blank=True)
     notes = models.TextField(blank=True)
 
@@ -282,3 +432,31 @@ class WorkBlock(ProvenancedRecord):
             value = getattr(self, name)
             if value is not None and not 1 <= value <= 5:
                 raise ValidationError(f"{name} must be between 1 and 5.")
+
+class ProbeBaseline(models.Model):
+    """Owner-set baseline window for one probe kind.
+
+    Configuration, not contributed data: it has no CID and may be edited. The
+    newest `frozen_at` per contributor and kind wins.
+    """
+
+    contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
+    kind = models.CharField(max_length=16, choices=ProbeSession.Kind.choices)
+    start = models.DateTimeField()
+    end = models.DateTimeField()
+    frozen_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-frozen_at"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(end__gt=models.F("start")), name="probebaseline_end_after_start"),
+        ]
+
+    def __str__(self):
+        return f"{self.contributor} {self.kind} {self.start:%Y-%m-%d} to {self.end:%Y-%m-%d}"
+
+    def clean(self):
+        if self.kind == ProbeSession.Kind.MODULE:
+            raise ValidationError({"kind": "module sessions are not scored, so they have no baseline."})
+        if self.start and self.end and self.end <= self.start:
+            raise ValidationError({"end": "end must be after start."})

@@ -1,4 +1,5 @@
 import datetime
+import zoneinfo
 from decimal import Decimal
 
 import pytest
@@ -6,10 +7,11 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 
-from core.models import Contributor, DailySnapshot, ImmutableRecordError
+from core.models import Contributor, DailySnapshot, ImmutableRecordError, Supersession
 from core.services import CREATED, SKIPPED, SUPERSEDED, record_snapshot
 
 D = datetime.date(2026, 11, 11)
+NY = zoneinfo.ZoneInfo("America/New_York")
 
 
 @pytest.fixture
@@ -32,9 +34,10 @@ def test_all_metrics_nullable_and_not_filled(mike):
 
 
 def test_cid_stable_across_float_string_decimal(mike):
-    a = snap(mike, weight_kg=97.8, bedtime="22:54").compute_cid()
-    b = snap(mike, weight_kg="97.8", bedtime=datetime.time(22, 54)).compute_cid()
-    c = snap(mike, weight_kg=Decimal("97.80"), bedtime="22:54").compute_cid()
+    bed = datetime.datetime(2026, 11, 10, 22, 54, tzinfo=NY)
+    a = snap(mike, weight_kg=97.8, bedtime=bed).compute_cid()
+    b = snap(mike, weight_kg="97.8", bedtime=bed.astimezone(datetime.timezone.utc)).compute_cid()
+    c = snap(mike, weight_kg=Decimal("97.80"), bedtime="2026-11-10T22:54:00-05:00").compute_cid()
     assert a == b == c
 
 
@@ -43,7 +46,7 @@ def test_cid_changes_when_value_changes(mike):
 
 
 def test_cid_ignores_ingest_metadata(mike):
-    # created_at and supersedes are not content
+    # created_at is not content
     a = snap(mike, hrv=41)
     b = snap(mike, hrv=41)
     b.created_at = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
@@ -61,7 +64,7 @@ def test_post_sauna_with_body_composition_rejected(mike, field, value):
 
 
 def test_post_sauna_without_body_composition_ok(mike):
-    snap(mike, bia_timing="post_sauna", weight_kg=97.8).save()
+    snap(mike, bia_timing="post_sauna", hrv=40).save()
     assert DailySnapshot.objects.count() == 1
 
 
@@ -80,13 +83,14 @@ def test_snapshot_immutable(mike):
 
 def test_service_created_skipped_superseded(mike):
     a, outcome = record_snapshot(snap(mike, hrv=41))
-    assert outcome == CREATED and a.supersedes is None
+    assert outcome == CREATED and not Supersession.objects.exists()
 
     again, outcome = record_snapshot(snap(mike, hrv=41))
     assert outcome == SKIPPED and again.pk == a.pk
 
     b, outcome = record_snapshot(snap(mike, hrv=44))
-    assert outcome == SUPERSEDED and b.supersedes == a
+    assert outcome == SUPERSEDED
+    assert Supersession.objects.get().old_cid == a.cid and Supersession.objects.get().new_cid == b.cid
     assert DailySnapshot.objects.count() == 2
 
 
@@ -139,4 +143,129 @@ def test_admin_add_supersedes_current(admin_client, mike):
     )
     assert resp.status_code == 302
     new = DailySnapshot.objects.current().get(date=D)
-    assert new.hrv == 45 and new.supersedes == s
+    assert new.hrv == 45 and Supersession.objects.get().old_cid == s.cid
+
+
+def test_revert_a_b_a_records_event_without_new_row(mike):
+    a, _ = record_snapshot(snap(mike, hrv=41))
+    b, _ = record_snapshot(snap(mike, hrv=44))
+    again, outcome = record_snapshot(snap(mike, hrv=41))
+    assert outcome == SUPERSEDED and again.pk == a.pk
+    assert DailySnapshot.objects.count() == 2
+    assert [(s.old_cid, s.new_cid) for s in Supersession.objects.order_by('id')] == [
+        (a.cid, b.cid),
+        (b.cid, a.cid),
+    ]
+    assert list(DailySnapshot.objects.current().filter(date=D)) == [a]
+
+
+def test_reingest_of_current_is_noop_after_revert(mike):
+    record_snapshot(snap(mike, hrv=41))
+    record_snapshot(snap(mike, hrv=44))
+    record_snapshot(snap(mike, hrv=41))
+    _, outcome = record_snapshot(snap(mike, hrv=41))
+    assert outcome == SKIPPED
+    assert Supersession.objects.count() == 2
+
+
+
+def test_direct_save_cannot_create_second_current_snapshot(mike):
+    snap(mike, hrv=41).save()
+    with pytest.raises(ValidationError):
+        snap(mike, hrv=44).save()
+    assert DailySnapshot.objects.count() == 1
+    assert not Supersession.objects.exists()
+
+
+def test_direct_save_with_supersede_records_event(mike):
+    a = snap(mike, hrv=41)
+    a.save()
+    b = snap(mike, hrv=44)
+    b.save(supersede=True)
+    assert Supersession.objects.get().new_cid == b.cid
+    assert list(DailySnapshot.objects.current().filter(date=D)) == [b]
+
+
+def test_other_date_or_contributor_is_not_blocked(mike):
+    snap(mike, hrv=41).save()
+    snap(mike, date=D + datetime.timedelta(days=1), hrv=41).save()
+    other = Contributor.objects.create(handle='other')
+    snap(other, hrv=41).save()
+    assert DailySnapshot.objects.current().count() == 3
+
+
+
+def test_after_midnight_bedtime_dated_to_wake_day(mike):
+    bed = datetime.datetime(2026, 11, 11, 1, 30, tzinfo=NY)
+    wake = datetime.datetime(2026, 11, 11, 7, 0, tzinfo=NY)
+    s = snap(mike, bedtime=bed, wake_time=wake)
+    s.save()
+    assert s.date == D
+    assert s.bedtime.astimezone(NY).date() == D
+
+
+def test_date_must_equal_wake_time_local_date(mike):
+    # 23:30 New York on Nov 10 is already Nov 11 in UTC; the local date wins.
+    wake = datetime.datetime(2026, 11, 11, 4, 30, tzinfo=datetime.timezone.utc)
+    with pytest.raises(ValidationError) as exc:
+        snap(mike, wake_time=wake).save()
+    assert 'date' in exc.value.message_dict
+    snap(mike, date=D - datetime.timedelta(days=1), wake_time=wake).save()
+
+
+@pytest.mark.parametrize('field', ['bedtime', 'wake_time'])
+def test_naive_datetime_rejected(mike, field):
+    naive = datetime.datetime(2026, 11, 11, 7, 0)
+    with pytest.raises(ValidationError) as exc:
+        snap(mike, **{field: naive}).save()
+    assert field in exc.value.message_dict
+    assert DailySnapshot.objects.count() == 0
+
+
+def test_contributor_timezone_default_and_validation(mike):
+    assert mike.timezone == 'America/New_York'
+    mike.timezone = 'Mars/Olympus'
+    with pytest.raises(ValidationError):
+        mike.full_clean()
+
+
+
+@pytest.mark.parametrize("field", ["weight_kg", "body_fat_pct", "skeletal_muscle_kg", "bmr_kcal"])
+def test_post_sauna_blocks_all_four_fields(mike, field):
+    value = {"weight_kg": 97.8, "body_fat_pct": 24.0, "skeletal_muscle_kg": 40.6, "bmr_kcal": 1900}[field]
+    with pytest.raises(ValidationError):
+        snap(mike, bia_timing="post_sauna", **{field: value}).save()
+
+
+def test_post_sauna_allows_spo2_and_sleep_fields(mike):
+    snap(mike, bia_timing="post_sauna", spo2=96.5, hrv=40, resting_hr_sleep=52, sleep_score=80).save()
+
+
+@pytest.mark.parametrize(
+    "field,bad,good",
+    [
+        ("weight_kg", (29.9, 300.1), (30, 300)),
+        ("resting_hr_sleep", (19, 151), (20, 150)),
+        ("hrv", (301,), (0, 300)),
+    ],
+)
+def test_new_bounds(mike, field, bad, good):
+    for v in bad:
+        with pytest.raises(ValidationError) as exc:
+            snap(mike, **{field: v}).save()
+        assert field in exc.value.message_dict
+    for i, v in enumerate(good):
+        snap(mike, date=D + datetime.timedelta(days=i), **{field: v}).save()
+
+
+@pytest.mark.parametrize("field", ["weight_kg", "spo2", "body_fat_pct", "skeletal_muscle_kg"])
+@pytest.mark.parametrize("bad", [1e30, float("nan"), float("inf"), "1e30", "nan", "abc", Decimal("1E+30")])
+def test_non_finite_or_huge_decimals_raise_validation_error_naming_field(mike, field, bad):
+    s = snap(mike, **{field: bad})
+    with pytest.raises(ValidationError) as exc:
+        s.validate()
+    assert field in exc.value.message_dict
+    with pytest.raises(ValidationError) as exc:
+        record_snapshot(snap(mike, **{field: bad}))
+    assert field in exc.value.message_dict
+    assert DailySnapshot.objects.count() == 0

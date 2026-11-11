@@ -1,7 +1,8 @@
 import pytest
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, models
 
-from core.models import Contributor, ImmutableRecordError, ProvenancedRecord
+from core.models import Contributor, ImmutableRecordError, ProvenancedRecord, Supersession
 
 
 class Dummy(ProvenancedRecord):
@@ -80,8 +81,40 @@ def test_refetched_record_is_immutable(dummy_table, mike):
 
 def test_supersede_chain_and_current(dummy_table, mike):
     a = Dummy.objects.create(contributor=mike, value=1)
-    b = Dummy.objects.create(contributor=mike, value=2, supersedes=a)
-    c = Dummy.objects.create(contributor=mike, value=3, supersedes=b)
+    b = Dummy.objects.create(contributor=mike, value=2)
+    c = Dummy.objects.create(contributor=mike, value=3)
     d = Dummy.objects.create(contributor=mike, value=9)
+    assert set(Dummy.objects.current()) == {a, b, c, d}
+    Supersession.record(a, b)
+    Supersession.record(b, c)
     assert set(Dummy.objects.current()) == {c, d}
-    assert c.supersedes.supersedes == a
+
+
+def test_revert_makes_original_current_again(dummy_table, mike):
+    a = Dummy.objects.create(contributor=mike, value=1)
+    b = Dummy.objects.create(contributor=mike, value=2)
+    Supersession.record(a, b)
+    Supersession.record(b, a, reason="revert")
+    assert set(Dummy.objects.current()) == {a}
+    assert Supersession.objects.count() == 2
+
+
+def test_supersession_is_append_only_and_validated(dummy_table, mike):
+    a = Dummy.objects.create(contributor=mike, value=1)
+    b = Dummy.objects.create(contributor=mike, value=2)
+    s = Supersession.record(a, b)
+    s.reason = "x"
+    with pytest.raises(ImmutableRecordError):
+        s.save()
+    with pytest.raises(ImmutableRecordError):
+        s.delete()
+    with pytest.raises(ImmutableRecordError):
+        Supersession.objects.all().update(reason="y")
+    with pytest.raises(ImmutableRecordError):
+        Supersession.objects.all().delete()
+    with pytest.raises(ValidationError):
+        Supersession.record(a, a)
+    other = Contributor.objects.create(handle="other")
+    c = Dummy.objects.create(contributor=other, value=3)
+    with pytest.raises(ValidationError):
+        Supersession.record(a, c)

@@ -8,3 +8,5 @@ staticfiles/
 .env
 data/inbox/*
 !data/inbox/.gitkeep
+.agents/
+.planner/
