@@ -21,7 +21,7 @@ DATETIME_KEYS = {
 } - {"created_at"}
 
 
-def localize(value, tz):
+def localize(value, tz, name="datetime"):
     """Aware datetime in UTC. Offset-less values are read in the contributor's time zone."""
     if isinstance(value, str):
         parsed = parse_datetime(value)
@@ -32,6 +32,13 @@ def localize(value, tz):
         raise ValidationError(f"Not a datetime: {value!r}")
     if value.tzinfo is None:
         value = value.replace(tzinfo=tz)
+        # Different offsets for fold=0 and fold=1 mean the local time is ambiguous (clocks
+        # go back) or does not exist (clocks go forward). Never pick silently.
+        if value.replace(fold=0).utcoffset() != value.replace(fold=1).utcoffset():
+            raise ValidationError(
+                {name: f"{value:%Y-%m-%d %H:%M} is ambiguous or does not exist in {tz.key} (DST); "
+                       "give an explicit UTC offset."}
+            )
     return value.astimezone(datetime.timezone.utc)
 
 
@@ -64,7 +71,7 @@ class Command(BaseCommand):
             for i, item in enumerate(items, start=1):
                 try:
                     item = {
-                        k: localize(v, contributor_obj.tzinfo) if k in DATETIME_KEYS and v is not None else v
+                        k: localize(v, contributor_obj.tzinfo, k) if k in DATETIME_KEYS and v is not None else v
                         for k, v in item.items()
                     }
                     snapshot = DailySnapshot(contributor=contributor_obj, **item)
