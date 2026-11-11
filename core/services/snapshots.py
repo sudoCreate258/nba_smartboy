@@ -1,6 +1,6 @@
 from django.db import transaction
 
-from .models import Contributor, DailySnapshot, Supersession
+from ..models import Contributor, DailySnapshot, Supersession
 
 CREATED = "created"
 SKIPPED = "skipped"

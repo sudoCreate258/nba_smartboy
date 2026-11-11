@@ -1,12 +1,13 @@
 from urllib.parse import urlencode
 
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import Contributor, DailySnapshot, ProbeSession, Supersession, WorkBlock
+from .models import Contributor, DailySnapshot, ProbeBaseline, ProbeSession, Supersession, WorkBlock
 from .services import SKIPPED, SUPERSEDED, record_snapshot
 
 
@@ -68,6 +69,26 @@ class CorrectableAdmin(ImmutableAdmin):
                     initial[field.name] = timezone.localtime(parsed)
         return initial
 
+    def get_form(self, request, obj=None, **kwargs):
+        form_class = super().get_form(request, obj, **kwargs)
+        source_cid = request.GET.get("supersedes")
+        model = self.model
+
+        class CorrectionForm(form_class):
+            def clean(self):
+                cleaned = super().clean()
+                if source_cid is None:
+                    return cleaned
+                old = model.objects.filter(cid=source_cid).first()
+                if old is None:
+                    raise ValidationError("The record to correct (supersedes) does not exist.")
+                contributor = cleaned.get("contributor")
+                if contributor is not None and contributor.pk != old.contributor_id:
+                    raise ValidationError("A correction must have the same contributor as the record it supersedes.")
+                return cleaned
+
+        return CorrectionForm
+
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         old = self.model.objects.filter(cid=request.GET.get("supersedes", "")).first()
@@ -79,8 +100,14 @@ class CorrectableAdmin(ImmutableAdmin):
 
 @admin.register(ProbeSession)
 class ProbeSessionAdmin(CorrectableAdmin):
-    list_display = ("started_at", "kind", "accuracy_pct", "location", "cid")
+    list_display = ("started_at", "kind", "accuracy_pct", "move_time_cv", "location", "cid")
     list_filter = ("kind", "location", "contributor")
+
+
+@admin.register(ProbeBaseline)
+class ProbeBaselineAdmin(admin.ModelAdmin):
+    list_display = ("contributor", "kind", "start", "end", "frozen_at")
+    list_filter = ("kind", "contributor")
 
 
 @admin.register(WorkBlock)
