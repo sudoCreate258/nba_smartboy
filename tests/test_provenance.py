@@ -1,6 +1,8 @@
 import datetime
 from decimal import Decimal
 
+import pytest
+
 from nymbus.provenance import canonical_bytes, compute_cid
 
 FIELDS = {"date": datetime.date(2026, 11, 11), "weight_kg": Decimal("97.8"), "hrv": None}
@@ -51,3 +53,15 @@ def test_cid_changes_with_content():
     assert base != compute_cid(canonical_bytes("daily_snapshot", "mike", {**FIELDS, "hrv": 41}))
     assert base != compute_cid(canonical_bytes("daily_snapshot", "other", FIELDS))
     assert base != compute_cid(canonical_bytes("probe_session", "mike", FIELDS))
+
+
+def test_naive_datetime_raises():
+    with pytest.raises(ValueError):
+        canonical_bytes('k', 'mike', {'t': datetime.datetime(2026, 1, 1, 7, 0)})
+
+
+def test_aware_datetimes_equal_instant_same_bytes():
+    a = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+    b = datetime.datetime(2026, 1, 1, 7, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5)))
+    assert canonical_bytes('k', 'mike', {'t': a}) == canonical_bytes('k', 'mike', {'t': b})
+

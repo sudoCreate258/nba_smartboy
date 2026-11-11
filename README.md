@@ -1,13 +1,15 @@
 # nba_smartboy
-![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
-<!-- Badge uses placeholder OWNER/REPO. Replace with the real GitHub path once the remote exists. -->
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+![CI](https://github.com/sudoCreate258/nba_smartboy/actions/workflows/ci.yml/badge.svg)
 
 
 Local-first personal health digital twin (Nymbus phase 1). Django 5 + PostgreSQL 16 in Docker Compose. Health data stays local.
 
 ## Run
 
-Requires Docker Desktop.
+Requires Docker Desktop. A .env file is required (fail-closed, no built-in password fallbacks): copy .env.example to .env and set your own values before starting. Compose refuses to start without it.
 
 ```powershell
 copy .env.example .env

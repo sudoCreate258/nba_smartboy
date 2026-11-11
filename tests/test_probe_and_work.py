@@ -122,3 +122,67 @@ def test_admin_work_block_end_before_start_shows_error(admin_client, mike):
     )
     assert resp.status_code == 200
     assert WorkBlock.objects.count() == 0
+
+
+@pytest.mark.parametrize(
+    "model,make,field,new_value,post",
+    [
+        (
+            "probesession",
+            lambda m: ProbeSession(contributor=m, started_at=T0, kind="puzzle_set", n_items=20),
+            "n_items",
+            25,
+            {"started_at_0": "2026-11-11", "started_at_1": "09:00:00", "kind": "puzzle_set", "n_items": "25", "notes": ""},
+        ),
+        (
+            "workblock",
+            lambda m: block(m),
+            "task_type",
+            "study",
+            {"start_0": "2026-11-11", "start_1": "09:00:00", "end_0": "2026-11-11", "end_1": "10:30:00", "task_type": "study", "notes": ""},
+        ),
+    ],
+)
+def test_admin_correction_records_supersession(admin_client, mike, model, make, field, new_value, post):
+    from core.models import Supersession
+
+    old = make(mike)
+    old.save()
+    resp = admin_client.post(
+        reverse(f"admin:core_{model}_changelist"),
+        {"action": "save_as_correction", "_selected_action": [old.pk]},
+    )
+    assert resp.status_code == 302
+    assert admin_client.get(resp.url).status_code == 200  # prefilled add form renders
+    resp = admin_client.post(resp.url, {"contributor": mike.pk, **post})
+    assert resp.status_code == 302
+    cls = type(old)
+    new = cls.objects.exclude(pk=old.pk).get()
+    assert getattr(new, field) == new_value
+    sup = Supersession.objects.get()
+    assert (sup.old_cid, sup.new_cid) == (old.cid, new.cid)
+    assert list(cls.objects.current()) == [new]
+
+
+def test_admin_correction_identical_record_writes_nothing(admin_client, mike):
+    from core.models import Supersession
+
+    old = block(mike)
+    old.save()
+    post = {"contributor": mike.pk, "start_0": "2026-11-11", "start_1": "04:00:00",
+            "end_0": "2026-11-11", "end_1": "05:30:00", "task_type": "code", "notes": ""}
+    url = reverse("admin:core_workblock_add") + f"?supersedes={old.cid}"
+    assert admin_client.post(url, post).status_code == 302
+    assert WorkBlock.objects.count() == 1 and Supersession.objects.count() == 0
+
+
+def test_admin_correction_action_needs_exactly_one(admin_client, mike):
+    a, b = block(mike), block(mike, task_type="admin")
+    a.save()
+    b.save()
+    resp = admin_client.post(
+        reverse("admin:core_workblock_changelist"),
+        {"action": "save_as_correction", "_selected_action": [a.pk, b.pk]},
+        follow=True,
+    )
+    assert b"Select exactly one record." in resp.content
