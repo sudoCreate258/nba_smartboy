@@ -2,7 +2,7 @@
 
 - [ ] T0. Owner decision: choose license (Apache-2.0 or AGPL-3.0). Builder adds `LICENSE` only after the owner decides.
 - [x] T1. Init repo: `git init`, `.gitignore` (Python, `.env`, `data/inbox/`), `.gitattributes` (`* text=auto eol=lf`), `README.md` with run steps.
-- [ ] T2. `requirements.txt`, `Dockerfile`, `docker-compose.yml` (web + db with healthcheck), `.env.example`. Verify `docker compose up -d --build` starts both. _(R1)_
+- [x] T2. `requirements.txt`, `Dockerfile`, `docker-compose.yml` (web + db with healthcheck), `.env.example`. Verify `docker compose up -d --build` starts both. _(R1)_
 - [ ] T3. Django project `twin` + app `core`; settings from env; `migrate` runs clean; superuser steps in README. _(R1)_
 - [ ] T4. `nymbus/provenance.py` (canonical bytes + CIDv1) with unit tests: determinism, change-sensitivity, fixed expected CIDs, format (`b` prefix, base32). _(R3)_
 - [ ] T5. `Contributor` + data migration for `mike`; abstract `ProvenancedRecord` with immutability and supersede chain. Tests. _(R2, R3)_
