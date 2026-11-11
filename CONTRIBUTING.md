@@ -7,13 +7,15 @@ Outside code contributions are not open until the worker co-op stage. Until then
 
 Any code contributed before then needs a Developer Certificate of Origin (DCO) sign-off. Add it with `git commit -s`, which appends a `Signed-off-by: Your Name <you@example.com>` line to each commit. By signing off you agree to the DCO, whose full text is in [DCO](DCO).
 
+This document covers code only. Data contributions are not covered by CONTRIBUTING.
+
 ## Branching model
 
 - `main`: stable, released state.
 - `develop`: integration branch. All work lands here first.
-- Feature branches: branch from `develop`, named by type, for example `feat/probe-log`, `fix/validator`, `chore/community-docs`.
+- Work branches: branch from `develop`, named `feature/*` or `chore/*`, for example `feature/m2-probe-log`, `chore/community-docs`.
 
-Flow: feature -> develop -> main. Open PRs against `develop`. Only `develop` is merged into `main`.
+Flow: `feature/*` or `chore/*` -> `develop` (PR, CI green) -> `main` (release, owner confirms each one). Open PRs against `develop`. Only `develop` is merged into `main`. PRs merge with merge commits (no squash), and branches are deleted after merge.
 
 ## Commit style
 
@@ -53,4 +55,4 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md). Report 
 
 ## License
 
-Contributions are licensed under AGPL-3.0.
+Contributions are licensed under AGPL-3.0-or-later.
