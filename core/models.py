@@ -474,6 +474,56 @@ class WorkBlock(ProvenancedRecord):
                     "correct that block instead of adding an overlapping one."
                 )
 
+class DiscomfortCheck(ProvenancedRecord):
+    """A quick discomfort rating. sharp_or_numb is a stop signal, not a score."""
+
+    record_kind = "discomfort_check"
+
+    class Area(models.TextChoices):
+        NECK = "neck"
+        SHOULDER = "shoulder"
+        WRIST = "wrist"
+        HIP = "hip"
+        LOW_BACK = "low_back"
+        OTHER = "other"
+
+    class Trigger(models.TextChoices):
+        END_OF_COMMUTE = "end_of_commute"
+        END_OF_MEETING = "end_of_meeting"
+        END_OF_BLOCK = "end_of_block"
+        STANDING_LONG = "standing_long"
+        OTHER = "other"
+
+    class Countermove(models.TextChoices):
+        NONE = "none"
+        HIP_FLEXOR = "hip_flexor"
+        CHIN_TUCK_PULLAPART = "chin_tuck_pullapart"
+        WRIST_MOBILITY = "wrist_mobility"
+        DEAD_HANG = "dead_hang"
+        CALF_WEIGHT_SHIFT = "calf_weight_shift"
+        WALK = "walk"
+        OTHER = "other"
+
+    at = models.DateTimeField()
+    area = models.CharField(max_length=16, choices=Area.choices)
+    score = models.PositiveSmallIntegerField(validators=[MaxValueValidator(10)])
+    trigger = models.CharField(max_length=16, choices=Trigger.choices)
+    countermove = models.CharField(max_length=24, choices=Countermove.choices, default=Countermove.NONE)
+    sharp_or_numb = models.BooleanField(
+        default=False, help_text="Sharp pain or numbness: stop the block and get it checked by a professional."
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-at"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(score__lte=10), name="discomfortcheck_score_0_10"),
+        ]
+
+    def __str__(self):
+        return f"{self.area} {self.score} {self.at:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+
 class ProbeBaseline(models.Model):
     """Owner-set baseline window for one probe kind.
 
