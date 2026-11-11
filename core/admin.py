@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import Contributor, DailySnapshot, ProbeSession, Supersession, WorkBlock
+from .models import Contributor, DailySnapshot, ProbeBaseline, ProbeSession, Supersession, WorkBlock
 from .services import SKIPPED, SUPERSEDED, record_snapshot
 
 
@@ -102,6 +102,12 @@ class CorrectableAdmin(ImmutableAdmin):
 class ProbeSessionAdmin(CorrectableAdmin):
     list_display = ("started_at", "kind", "accuracy_pct", "move_time_cv", "location", "cid")
     list_filter = ("kind", "location", "contributor")
+
+
+@admin.register(ProbeBaseline)
+class ProbeBaselineAdmin(admin.ModelAdmin):
+    list_display = ("contributor", "kind", "start", "end", "frozen_at")
+    list_filter = ("kind", "contributor")
 
 
 @admin.register(WorkBlock)
