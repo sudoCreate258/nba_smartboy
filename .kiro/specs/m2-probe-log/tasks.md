@@ -7,5 +7,5 @@
 - [x] T4. `twin_metrics/probes.py` with the full synthetic-series unit tests. _(R2–R4, R6)_
 - [x] T5. Sleep-falling and work-rising conditions in the service layer, incl. insufficient-data handling. Tests. _(R4)_
 - [x] T6. `probe_report` command (text + `--json`). Tests on a seeded database. _(R5)_
-- [ ] T7. README section: how to log probes, set a baseline, read the report.
+- [x] T7. README section: how to log probes, set a baseline, read the report.
 - [ ] T8. Full suite in Docker and on GitHub Actions; write M2 Status in DECISIONS (test count, run URL, open questions).
