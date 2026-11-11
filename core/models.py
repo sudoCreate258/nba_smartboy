@@ -470,10 +470,21 @@ class WorkBlock(ProvenancedRecord):
         if self.contributor_id and isinstance(self.start, datetime.datetime) and isinstance(self.end, datetime.datetime):
             clash = self.overlapping().first()
             if clash is not None:
+                tz = self.contributor.tzinfo
+                s, e = clash.start.astimezone(tz), clash.end.astimezone(tz)
                 raise ValidationError(
-                    f"Overlaps work block {clash.start:%Y-%m-%d %H:%M}-{clash.end:%H:%M} UTC ({clash.cid[:12]}); "
-                    "correct that block instead of adding an overlapping one."
+                    f"Overlaps work block {s:%Y-%m-%d %H:%M}-{e:%H:%M} {self.contributor.timezone} "
+                    f"({clash.cid[:12]}); correct that block instead of adding an overlapping one."
                 )
+
+    def save(self, *args, **kwargs):
+        """Serializes the overlap check and insert per contributor (row lock), so two
+        concurrent overlapping blocks cannot both pass validation."""
+        if not self._state.adding:
+            return super().save(*args, **kwargs)  # raises ImmutableRecordError
+        with transaction.atomic():
+            Contributor.objects.select_for_update().get(pk=self.contributor_id)
+            super().save(*args, **kwargs)
 
 class DiscomfortCheck(ProvenancedRecord):
     """A quick discomfort rating. sharp_or_numb is a stop signal, not a score."""

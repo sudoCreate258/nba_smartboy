@@ -24,24 +24,59 @@ def _window_end(contributor, last_week):
     return datetime.datetime.combine(last_week + datetime.timedelta(days=7), datetime.time.min, tzinfo=contributor.tzinfo)
 
 
-def current_probe(cid):
+class ProbeResolver:
+    """Resolves referenced probe CIDs to current sessions of one contributor, in memory.
+
+    Loads the contributor's current sessions and supersession events once, then
+    follows correction chains (latest event per old CID) without further queries.
+    """
+
+    def __init__(self, contributor):
+        self.current = {p.cid: p for p in ProbeSession.objects.current().filter(contributor=contributor)}
+        self.next = {}
+        for old, new in (Supersession.objects.filter(contributor=contributor)
+                         .order_by("id").values_list("old_cid", "new_cid")):
+            self.next[old] = new  # later events win
+
+    def resolve(self, cid):
+        """(session or None, corrected: bool)."""
+        start = cid
+        for _ in range(MAX_CHAIN):
+            if cid in self.current:
+                return self.current[cid], cid != start
+            if cid not in self.next:
+                return None, False
+            cid = self.next[cid]
+        return None, False
+
+
+def current_probe(cid, contributor):
     """The current probe session for a referenced CID, following corrections; None if missing."""
-    seen = 0
-    while seen < MAX_CHAIN:
-        session = ProbeSession.objects.current().filter(cid=cid).first()
-        if session is not None:
-            return session
-        step = Supersession.objects.filter(old_cid=cid).order_by("-id").first()
-        if step is None:
-            return None
-        cid, seen = step.new_cid, seen + 1
-    return None
+    return ProbeResolver(contributor).resolve(cid)[0]
 
 
 def _metrics(session):
-    if session is None:
-        return {}
     return {m: None if getattr(session, m) is None else float(getattr(session, m)) for m in zone.RESET_METRICS}
+
+
+def resolve_reset(reset, resolver):
+    """({"kind", "before", "after", "corrected"}, None) or (None, problem text).
+
+    The probes are rechecked against the Reset's own rules after following
+    corrections: current mini_puzzle sessions of the reset's contributor that
+    bracket the reset (before < at < after).
+    """
+    before, before_fixed = resolver.resolve(reset.before_probe_cid)
+    after, after_fixed = resolver.resolve(reset.after_probe_cid)
+    label = f"reset {reset.kind} at {reset.at.astimezone(reset.contributor.tzinfo):%Y-%m-%d %H:%M} ({reset.cid[:12]})"
+    if before is None or after is None:
+        return None, f"{label}: a referenced probe no longer resolves to a current session"
+    if before.kind != ProbeSession.Kind.MINI_PUZZLE or after.kind != ProbeSession.Kind.MINI_PUZZLE:
+        return None, f"{label}: a referenced probe was corrected to a kind other than mini_puzzle"
+    if not before.started_at < reset.at < after.started_at:
+        return None, f"{label}: the corrected probes no longer bracket the reset"
+    return {"kind": reset.kind, "before": _metrics(before), "after": _metrics(after),
+            "corrected": before_fixed or after_fixed}, None
 
 
 def block_dict(b):
@@ -61,8 +96,11 @@ def zone_report(contributor, weeks=4, until=None):
     end = _window_end(contributor, reported[-1])
     start = datetime.datetime.combine(reported[0], datetime.time.min, tzinfo=tz)
 
-    blocks = [block_dict(b) for b in WorkBlock.objects.current().filter(contributor=contributor, start__lt=end)]
-    all_weeks = zone.weekly_zone(blocks, tz)  # includes earlier weeks, needed for the amber comparison
+    # Earlier weeks are needed for the amber comparison, but only PRIOR_WEEKS of them.
+    lookback = start - datetime.timedelta(weeks=zone.PRIOR_WEEKS)
+    blocks = [block_dict(b) for b in WorkBlock.objects.current()
+              .filter(contributor=contributor, start__gte=lookback, start__lt=end)]
+    all_weeks = zone.weekly_zone(blocks, tz)
     zone_weeks = []
     for week in reported:
         summary = all_weeks.get(week)
@@ -72,10 +110,19 @@ def zone_report(contributor, weeks=4, until=None):
               .filter(contributor=contributor, at__gte=start, at__lt=end)]
     discomfort = zone.weekly_discomfort(checks, tz)
 
-    resets = []
-    for r in Reset.objects.current().filter(contributor=contributor, at__lt=end):
-        resets.append({"kind": r.kind, "before": _metrics(current_probe(r.before_probe_cid)),
-                       "after": _metrics(current_probe(r.after_probe_cid))})
+    earlier_stops = DiscomfortCheck.objects.current().filter(
+        contributor=contributor, at__lt=start, sharp_or_numb=True
+    ).count()
+
+    resolver = ProbeResolver(contributor)
+    resets, excluded, corrected = [], [], 0
+    for r in Reset.objects.current().filter(contributor=contributor, at__lt=end).select_related("contributor"):
+        item, problem = resolve_reset(r, resolver)
+        if problem:
+            excluded.append(problem)
+        else:
+            resets.append(item)
+            corrected += item["corrected"]
 
     weekly_checks = list(
         WeeklyCheck.objects.current()
@@ -91,9 +138,12 @@ def zone_report(contributor, weeks=4, until=None):
     return {
         "weeks": reported,
         "stop_signals": zone.stop_signals(checks),
+        "earlier_stop_signals": earlier_stops,
         "zone": zone_weeks,
         "discomfort": [{"week": w, "summary": discomfort.get(w)} for w in reported],
         "resets": zone.reset_effect(resets),
+        "resets_excluded": excluded,
+        "resets_corrected": corrected,
         "weekly_checks": weekly_checks,
         "probes": probes,
     }

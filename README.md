@@ -71,13 +71,15 @@ docker compose exec web python manage.py zone_report
 docker compose exec web python manage.py zone_report --weeks 8 --json
 ```
 
-Options: `--contributor mike` (default), `--weeks 4` (default), `--until YYYY-MM-DD` (last day shown; default today), `--json`.
+Options: `--contributor mike` (default), `--weeks 4` (default), `--until YYYY-MM-DD` (the last reported week is the whole local week containing this date; default today), `--json`.
 
 - Weeks are local weeks starting Monday, in the contributor's time zone. A block that crosses midnight counts in the week it started.
 - High focus: absorption of 4 or more and at most 1 interruption. A block with either value missing is not counted as high focus.
 - Per week: total hours, high-focus minutes, focus share (high-focus minutes / all minutes), the median and interquartile range of high-focus block lengths (the "theta" band), and the same split by location, posture and planned length.
 - Zone amber: the focus share is at least 20% below the mean of the 3 weeks before, while total hours stay within 10% of their mean. You are working as much but with less flow. If any of those 3 weeks has no work blocks, it shows "insufficient data".
-- Reset effect: for each reset kind, the number of resets and the mean change (after minus before) in mini-probe accuracy and solve time, compared with `none`. Kinds with fewer than 5 resets are shown but marked "not interpretable yet".
+- Reset effect: for each reset kind and metric, the number of usable before/after pairs (both probes recorded that metric) and the mean change (after minus before) in mini-probe accuracy and solve time, compared with `none`. A metric with fewer than 5 pairs is marked "not interpretable yet", and the comparison with `none` is marked "underpowered" unless both sides have 5 or more. If a probe was corrected later, the current version is used; a reset whose corrected probes are no longer mini-puzzles or no longer bracket it is listed as excluded.
+- Stop signals before the reported weeks are counted on one line, so they do not disappear when they fall out of the window.
+- The JSON output never includes free-text notes.
 - Discomfort: per week, the mean score per area, how many checks scored 3 or more per trigger, and how often a countermove followed them.
 - The weekly check and the probe flags are shown next to these, never combined into one score.
 
