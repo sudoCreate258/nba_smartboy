@@ -5,9 +5,9 @@
   bedtime: 2026-11-10 22:54:00
   resting_hr_sleep: 52
   hrv: 41
-  weight_kg: 97.8
-  body_fat_pct: 24.0
-  skeletal_muscle_kg: 40.6
+  weight_kg: 70.0
+  body_fat_pct: 15.0
+  skeletal_muscle_kg: 30.0
 - date: 2026-11-12
   source: samsung_health
   sleep_score: 79
