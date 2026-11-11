@@ -100,7 +100,7 @@ class CorrectableAdmin(ImmutableAdmin):
 
 @admin.register(ProbeSession)
 class ProbeSessionAdmin(CorrectableAdmin):
-    list_display = ("started_at", "kind", "accuracy_pct", "location", "cid")
+    list_display = ("started_at", "kind", "accuracy_pct", "move_time_cv", "location", "cid")
     list_filter = ("kind", "location", "contributor")
 
 

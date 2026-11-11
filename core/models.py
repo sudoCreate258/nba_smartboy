@@ -328,6 +328,7 @@ class DailySnapshot(ProvenancedRecord):
 
 class ProbeSession(ProvenancedRecord):
     record_kind = "probe_session"
+    OMIT_IF_NULL = ("move_time_cv",)
 
     class Kind(models.TextChoices):
         PUZZLE_SET = "puzzle_set"
@@ -352,6 +353,9 @@ class ProbeSession(ProvenancedRecord):
     fast_blunders = models.PositiveSmallIntegerField(null=True, blank=True)
     opponent_rating = models.PositiveSmallIntegerField(null=True, blank=True)
     own_rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    move_time_cv = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)]
+    )
     location = models.CharField(max_length=16, choices=Location.choices, null=True, blank=True)
     notes = models.TextField(blank=True)
 
