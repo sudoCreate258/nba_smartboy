@@ -10,9 +10,9 @@ _CID_PREFIX = bytes([0x01, 0x55, 0x12, 0x20])  # CIDv1, raw codec, sha2-256, 32 
 
 def _normalize(value):
     if isinstance(value, datetime.datetime):
-        if value.tzinfo is not None:
-            value = value.astimezone(datetime.timezone.utc)
-        return value.isoformat()
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Naive datetimes are never hashed; attach a time zone first.")
+        return value.astimezone(datetime.timezone.utc).isoformat()
     if isinstance(value, (datetime.date, datetime.time)):
         return value.isoformat()
     if isinstance(value, Decimal):

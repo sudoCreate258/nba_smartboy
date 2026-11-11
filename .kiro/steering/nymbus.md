@@ -48,5 +48,7 @@ This repo is in **Nymbus phase 1**. Do not build phase 2+ features.
   modules with no Django imports, so it can move behind the Nymbus storage
   layer later.
 - Records are immutable once they have a CID. Corrections are new records.
+- Any nullable field added to a record model after records exist goes into
+  that model's `OMIT_IF_NULL` in the same change, so existing CIDs never move.
 - Every record has a contributor, even with one contributor.
 - Payout is simulated only: units, not money or tokens.

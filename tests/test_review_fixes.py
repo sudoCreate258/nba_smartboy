@@ -11,6 +11,7 @@ from core.models import (
     DailySnapshot,
     ImmutableRecordError,
     ProbeSession,
+    Supersession,
 )
 from core.services import record_snapshot
 
@@ -90,15 +91,18 @@ def test_queryset_update_and_delete_blocked(mike):
     assert DailySnapshot.objects.get(pk=s.pk).weight_kg == 80
 
 
-def test_supersede_must_match_contributor_and_date(mike, db):
+def test_supersession_must_match_contributor_and_kind(mike, db):
     other = Contributor.objects.create(handle="other")
     old = snap(mike, weight_kg=80)
     old.save()
+    foreign = snap(other, weight_kg=81)
+    foreign.save()
     with pytest.raises(ValidationError):
-        snap(other, weight_kg=81, supersedes=old).save()
+        Supersession.record(old, foreign)
+    p = probe(mike)
+    p.save()
     with pytest.raises(ValidationError):
-        snap(mike, date=D + datetime.timedelta(days=1), weight_kg=81, supersedes=old).save()
-    snap(mike, weight_kg=81, supersedes=old).save()
+        Supersession.record(old, p)
 
 
 def run_settings(env):
