@@ -29,8 +29,19 @@
 - **Data contributions** are governed separately: a data contribution agreement / co-op membership terms (what is shared, for what purposes, withdrawal, dividend formula), per-study informed consent (IRB) for any clinical-trial participation, and a data license (e.g. CDLA) for any shared datasets.
 - **Payout experience:** usage dividends ("Time Coin") arrive like a recurring direct deposit. Contributors keep control: they see which of their data and media generated usage, choose per category what may be used, and can change that at any time. Shapes M5 (see product steering). Real payouts stay behind the Nymbus phase 4 legal gate.
 
+### Planner answers to the M1.1 builder choices and review (2026-11-11)
+- Accepted: `date` validated against the wake_time local date (explicit `date` stays required in YAML); `save(supersede=True)` as the correction path; Supersession stores plain CID strings (CID is the cross-layer key in Nymbus, so no FK); incremental migrations 0006–0008.
+- Review fixes go in M2-T0 (housekeeping) before probe work:
+  - `record_snapshot` validates before hashing; a naive datetime raises ValidationError.
+  - Admin "Save as correction" with a bad `supersedes` value shows a form error, not a 500.
+  - SPDX header on `0008_validation_bounds.py`.
+  - DST: ambiguous or nonexistent local times are rejected with a ValidationError naming the field (no silent pick). Provenance beats convenience.
+  - Line endings: `git add --renormalize .` so the repo is LF everywhere, per `.gitattributes`.
+  - `.agents/` (Kiro task state and reviews) is added to `.gitignore`. `docs/DECISIONS.md` stays the shared record; summarize review findings there.
+- Push: yes. Push `main` (after M2-T0) and confirm the first GitHub Actions run is green before M2-T1. Record the run URL in Status. Note: `.git/refs/remotes/origin/main` already exists locally, so check what (if anything) was pushed earlier.
+- Process: combined commits are fine when edits overlap; say so in the message.
+
 ## Open
-- M1.1 builder choices needing planner confirmation: (1) `date` is validated against the wake_time local date, not derived, so ingest still requires `date`. (2) `DailySnapshot.save(supersede=True)` is how a correction is written; a plain `save()` on a date that already has a current snapshot raises ValidationError. (3) Supersession.old_cid/new_cid are plain CID strings (CIDs embed the record kind, so they are globally unique), not FKs. (4) Migrations were incremental (0006-0008); 0007 drops and re-adds bedtime/wake_time because TimeField has no safe cast to DateTimeField.
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
 - Payout: the Nymbus doc says contributors get paid in cryptocurrency; the owner also wants the project free to the public and run by a co-op/nonprofit. M1–M5 use simulated units only.
@@ -39,4 +50,5 @@
 
 ## Status
 - M1: built (T1–T10). T0 decided (AGPL-3.0-or-later). Baseline verified at M1.1 start: `docker compose exec web pytest` ran 76 passed (earlier figures of 59 and 76 were unverified).
+- M2: spec written (`.kiro/specs/m2-probe-log/`). Not started.
 - M1.1: built (T1-T9, spec `.kiro/specs/m1-1-fixes/`). Verified 2026-11-11: `docker compose exec web pytest` ran 138 passed; `makemigrations --check` reports no changes. Corrections for DailySnapshot, ProbeSession and WorkBlock all record a Supersession. Not pushed; CI has not run on GitHub yet.
