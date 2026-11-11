@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Git pre-push hook (installed by scripts/install-hooks.ps1): refuses the push
+# unless the local CI gate passes on the committed state.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+if ! git diff --quiet HEAD --; then
+  echo "pre-push: commit or stash your changes first; the gate must test what you push." >&2
+  exit 1
+fi
+if ! sh scripts/ci-local.sh; then
+  echo "pre-push: local CI gate failed; push refused." >&2
+  exit 1
+fi

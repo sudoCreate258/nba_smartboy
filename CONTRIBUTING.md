@@ -40,6 +40,19 @@ docker compose exec web pytest
 
 Tests must pass before you open a PR. CI runs the same suite (`.github/workflows/ci.yml`).
 
+### Local CI gate
+
+The local gate runs the same checks as CI (`pytest -q` and `makemigrations --check --dry-run`) in Docker and records the result in `.agents/ci-local-last.txt`:
+
+```powershell
+powershell -File scripts/ci-local.ps1     # or: sh scripts/ci-local.sh
+powershell -File scripts/install-hooks.ps1  # once: refuse a push unless the gate passes
+```
+
+The pre-push hook refuses to push with uncommitted changes, so the gate tests exactly what is pushed. GitHub Actions is the second gate. When it is unavailable, a PR may merge into `develop` on a green local gate; the PR description says so and gives the gate result. Push in batches, not after every commit.
+
+Test fixtures use synthetic values only, never real personal data.
+
 ## Pull request process
 
 1. Branch from `develop` and keep the change focused.

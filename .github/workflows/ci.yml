@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# Read-only token: the workflow never needs write access, and it never runs on the
+# privileged "target" variant of pull-request events (tests/test_repo_hygiene.py).
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

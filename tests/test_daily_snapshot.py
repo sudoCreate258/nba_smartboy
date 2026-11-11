@@ -35,9 +35,9 @@ def test_all_metrics_nullable_and_not_filled(mike):
 
 def test_cid_stable_across_float_string_decimal(mike):
     bed = datetime.datetime(2026, 11, 10, 22, 54, tzinfo=NY)
-    a = snap(mike, weight_kg=97.8, bedtime=bed).compute_cid()
-    b = snap(mike, weight_kg="97.8", bedtime=bed.astimezone(datetime.timezone.utc)).compute_cid()
-    c = snap(mike, weight_kg=Decimal("97.80"), bedtime="2026-11-10T22:54:00-05:00").compute_cid()
+    a = snap(mike, weight_kg=70.0, bedtime=bed).compute_cid()
+    b = snap(mike, weight_kg="70.0", bedtime=bed.astimezone(datetime.timezone.utc)).compute_cid()
+    c = snap(mike, weight_kg=Decimal("70.00"), bedtime="2026-11-10T22:54:00-05:00").compute_cid()
     assert a == b == c
 
 
@@ -53,7 +53,7 @@ def test_cid_ignores_ingest_metadata(mike):
     assert a.compute_cid() == b.compute_cid()
 
 
-@pytest.mark.parametrize("field,value", [("body_fat_pct", 24.0), ("skeletal_muscle_kg", 40.6), ("bmr_kcal", 1900)])
+@pytest.mark.parametrize("field,value", [("body_fat_pct", 15.0), ("skeletal_muscle_kg", 30.0), ("bmr_kcal", 1900)])
 def test_post_sauna_with_body_composition_rejected(mike, field, value):
     s = snap(mike, bia_timing="post_sauna", **{field: value})
     with pytest.raises(ValidationError):
@@ -69,7 +69,7 @@ def test_post_sauna_without_body_composition_ok(mike):
 
 
 def test_pre_session_with_body_composition_ok(mike):
-    snap(mike, bia_timing="pre_session", body_fat_pct=24.0).save()
+    snap(mike, bia_timing="pre_session", body_fat_pct=15.0).save()
     assert DailySnapshot.objects.count() == 1
 
 
@@ -106,7 +106,7 @@ def test_one_current_per_contributor_per_date(mike):
 
 def test_service_rejects_post_sauna_body_comp(mike):
     with pytest.raises(ValidationError):
-        record_snapshot(snap(mike, bia_timing="post_sauna", body_fat_pct=24.0))
+        record_snapshot(snap(mike, bia_timing="post_sauna", body_fat_pct=15.0))
 
 
 @pytest.fixture
@@ -124,14 +124,14 @@ def test_admin_existing_record_is_read_only(admin_client, mike):
 
 
 def test_admin_save_as_correction_prefills_add_form(admin_client, mike):
-    s, _ = record_snapshot(snap(mike, hrv=41, weight_kg=97.8))
+    s, _ = record_snapshot(snap(mike, hrv=41, weight_kg=70.0))
     resp = admin_client.post(
         reverse("admin:core_dailysnapshot_changelist"),
         {"action": "save_as_correction", "_selected_action": [s.pk]},
     )
     assert resp.status_code == 302
     assert resp.url.startswith(reverse("admin:core_dailysnapshot_add"))
-    assert "hrv=41" in resp.url and "weight_kg=97.8" in resp.url
+    assert "hrv=41" in resp.url and "weight_kg=70.0" in resp.url
     assert admin_client.get(resp.url).status_code == 200
 
 
@@ -232,7 +232,7 @@ def test_contributor_timezone_default_and_validation(mike):
 
 @pytest.mark.parametrize("field", ["weight_kg", "body_fat_pct", "skeletal_muscle_kg", "bmr_kcal"])
 def test_post_sauna_blocks_all_four_fields(mike, field):
-    value = {"weight_kg": 97.8, "body_fat_pct": 24.0, "skeletal_muscle_kg": 40.6, "bmr_kcal": 1900}[field]
+    value = {"weight_kg": 70.0, "body_fat_pct": 15.0, "skeletal_muscle_kg": 30.0, "bmr_kcal": 1900}[field]
     with pytest.raises(ValidationError):
         snap(mike, bia_timing="post_sauna", **{field: value}).save()
 
