@@ -2,6 +2,11 @@
 
 Thanks for helping with nba_smartboy. This project handles personal health data, so keep real data out of commits, issues, and PRs.
 
+## Who can contribute
+Outside code contributions are not open until the worker co-op stage. Until then, please do not send code PRs.
+
+Any code contributed before then needs a Developer Certificate of Origin (DCO) sign-off. Add it with `git commit -s`, which appends a `Signed-off-by: Your Name <you@example.com>` line to each commit. By signing off you agree to the DCO, whose full text is in [DCO](DCO).
+
 ## Branching model
 
 - `main`: stable, released state.
