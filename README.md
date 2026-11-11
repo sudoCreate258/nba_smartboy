@@ -1,4 +1,7 @@
 # nba_smartboy
+![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
+<!-- Badge uses placeholder OWNER/REPO. Replace with the real GitHub path once the remote exists. -->
+
 
 Local-first personal health digital twin (Nymbus phase 1). Django 5 + PostgreSQL 16 in Docker Compose. Health data stays local.
 

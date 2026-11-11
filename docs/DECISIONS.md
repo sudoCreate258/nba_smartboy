@@ -22,4 +22,7 @@
 - Source material (white papers, fitness AI venture brief, `digital-twin.jsx`, CS questions specs) to be added to `docs/`.
 
 ## Status
-- M1: not started.
+- M1: shipped, pending owner license decision (T0). T1-T10 done.
+  - Shipped: Docker Compose stack (Django 5.2 + PostgreSQL 16), `core` app with Contributor (`mike` data migration), immutable ProvenancedRecord with CIDv1 and supersede chain, DailySnapshot (read-only admin, "Save as correction", post-sauna rule), ProbeSession, WorkBlock, `ingest_yaml` command (atomic, CID skip, supersede), GitHub Actions CI (postgres service, pytest). 59 tests pass via `docker compose exec web pytest`.
+  - Issues: T0 license is pending, so no `LICENSE` file has been added. The README CI badge uses placeholder `OWNER/REPO` and must be updated once the GitHub remote exists. CI workflow has not run yet (no remote), so it is unverified on GitHub. Docker: `.env` is optional in compose (`required: false`) and defaults fall back to `twin`; `.env.example` uses `change-me` values.
+  - Open questions for the planner: the four builder items in Open above (post-sauna field set, A -> B -> A revert handling, numeric types, UTC normalization), plus the license choice.

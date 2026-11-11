@@ -9,5 +9,5 @@
 - [x] T6. `DailySnapshot` + admin (read-only, "Save as correction") + post-sauna validation. Tests. _(R4)_
 - [x] T7. `ProbeSession`, `WorkBlock` + admin; WorkBlock validation. Tests. _(R5, R6)_
 - [x] T8. `ingest_yaml` command: atomic, unknown-key rollback, CID skip, supersede on change, summary output. Tests with a sample YAML fixture. _(R7)_
-- [ ] T9. GitHub Actions CI with postgres service; badge in README. _(R8)_
-- [ ] T10. Write the M1 status into `docs/DECISIONS.md` (shipped / issues / open questions) for the planner.
+- [x] T9. GitHub Actions CI with postgres service; badge in README. _(R8)_
+- [x] T10. Write the M1 status into `docs/DECISIONS.md` (shipped / issues / open questions) for the planner.
