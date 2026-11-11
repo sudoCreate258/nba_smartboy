@@ -64,7 +64,7 @@ def test_post_sauna_with_body_composition_rejected(mike, field, value):
 
 
 def test_post_sauna_without_body_composition_ok(mike):
-    snap(mike, bia_timing="post_sauna", weight_kg=97.8).save()
+    snap(mike, bia_timing="post_sauna", hrv=40).save()
     assert DailySnapshot.objects.count() == 1
 
 
@@ -228,3 +228,44 @@ def test_contributor_timezone_default_and_validation(mike):
     with pytest.raises(ValidationError):
         mike.full_clean()
 
+
+
+@pytest.mark.parametrize("field", ["weight_kg", "body_fat_pct", "skeletal_muscle_kg", "bmr_kcal"])
+def test_post_sauna_blocks_all_four_fields(mike, field):
+    value = {"weight_kg": 97.8, "body_fat_pct": 24.0, "skeletal_muscle_kg": 40.6, "bmr_kcal": 1900}[field]
+    with pytest.raises(ValidationError):
+        snap(mike, bia_timing="post_sauna", **{field: value}).save()
+
+
+def test_post_sauna_allows_spo2_and_sleep_fields(mike):
+    snap(mike, bia_timing="post_sauna", spo2=96.5, hrv=40, resting_hr_sleep=52, sleep_score=80).save()
+
+
+@pytest.mark.parametrize(
+    "field,bad,good",
+    [
+        ("weight_kg", (29.9, 300.1), (30, 300)),
+        ("resting_hr_sleep", (19, 151), (20, 150)),
+        ("hrv", (301,), (0, 300)),
+    ],
+)
+def test_new_bounds(mike, field, bad, good):
+    for v in bad:
+        with pytest.raises(ValidationError) as exc:
+            snap(mike, **{field: v}).save()
+        assert field in exc.value.message_dict
+    for i, v in enumerate(good):
+        snap(mike, date=D + datetime.timedelta(days=i), **{field: v}).save()
+
+
+@pytest.mark.parametrize("field", ["weight_kg", "spo2", "body_fat_pct", "skeletal_muscle_kg"])
+@pytest.mark.parametrize("bad", [1e30, float("nan"), float("inf"), "1e30", "nan", "abc", Decimal("1E+30")])
+def test_non_finite_or_huge_decimals_raise_validation_error_naming_field(mike, field, bad):
+    s = snap(mike, **{field: bad})
+    with pytest.raises(ValidationError) as exc:
+        s.validate()
+    assert field in exc.value.message_dict
+    with pytest.raises(ValidationError) as exc:
+        record_snapshot(snap(mike, **{field: bad}))
+    assert field in exc.value.message_dict
+    assert DailySnapshot.objects.count() == 0

@@ -36,6 +36,13 @@ def localize(value, tz):
 
 
 
+def describe(exc):
+    """Error text that names the field when the error is per-field."""
+    if hasattr(exc, "error_dict"):
+        return "; ".join(f"{name}: {' '.join(msgs)}" for name, msgs in exc.message_dict.items())
+    return "; ".join(exc.messages)
+
+
 class Command(BaseCommand):
     help = "Ingest DailySnapshots from a YAML file (one mapping or a list) in a single transaction."
 
@@ -63,7 +70,7 @@ class Command(BaseCommand):
                     snapshot = DailySnapshot(contributor=contributor_obj, **item)
                     record, outcome = record_snapshot(snapshot)
                 except ValidationError as exc:
-                    raise CommandError(f"Record {i}: {'; '.join(exc.messages)}")
+                    raise CommandError(f"Record {i}: {describe(exc)}")
                 counts[outcome] += 1
                 if outcome != SKIPPED:
                     new_cids.append(record.cid)

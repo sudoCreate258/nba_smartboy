@@ -5,7 +5,7 @@
 - [x] T3. Supersession table replacing the `supersedes` FK; shared current-record helper; revert and no-op tests. _(F2)_
 - [x] T4. Move the current-per-date lock/check into `DailySnapshot.save()`; direct-save rejection test. _(F3)_
 - [x] T5. `Contributor.timezone`; bedtime/wake_time as aware datetimes; date = wake local date; UTC before hashing; naive rejected. Tests. _(F4)_
-- [ ] T6. Post-sauna field set incl. weight_kg; new bounds; non-finite/out-of-range → ValidationError. Tests. _(F5)_
+- [x] T6. Post-sauna field set incl. weight_kg; new bounds; non-finite/out-of-range → ValidationError. Tests. _(F5)_
 - [ ] T7. Admin "Save as correction" for ProbeSession and WorkBlock. Tests. _(F6)_
 - [x] T8. Make README, compose and DECISIONS agree on fail-closed `.env`. _(F7)_
 - [ ] T9. Run the full suite, record the count; mark Kiro's M1 task state done with a verification entry; write M1.1 Status in DECISIONS. _(F7)_

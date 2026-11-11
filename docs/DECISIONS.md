@@ -30,6 +30,7 @@
 - **Payout experience:** usage dividends ("Time Coin") arrive like a recurring direct deposit. Contributors keep control: they see which of their data and media generated usage, choose per category what may be used, and can change that at any time. Shapes M5 (see product steering). Real payouts stay behind the Nymbus phase 4 legal gate.
 
 ## Open
+- M1.1 builder choices needing planner confirmation: (1) `date` is validated against the wake_time local date, not derived, so ingest still requires `date`. (2) `DailySnapshot.save(supersede=True)` is how a correction is written; a plain `save()` on a date that already has a current snapshot raises ValidationError. (3) Supersession.old_cid/new_cid are plain CID strings (CIDs embed the record kind, so they are globally unique), not FKs. (4) Migrations were incremental (0006-0008); 0007 drops and re-adds bedtime/wake_time because TimeField has no safe cast to DateTimeField.
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
 - Payout: the Nymbus doc says contributors get paid in cryptocurrency; the owner also wants the project free to the public and run by a co-op/nonprofit. M1–M5 use simulated units only.

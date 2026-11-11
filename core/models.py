@@ -1,6 +1,6 @@
 import datetime
 import zoneinfo
-from decimal import Decimal
+from decimal import Context, Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -11,6 +11,19 @@ from django.utils import timezone
 from nymbus.provenance import canonical_bytes, compute_cid
 
 _NON_CONTENT_FIELDS = {"cid", "contributor", "created_at"}
+
+
+_WIDE = Context(prec=60)
+
+
+def quantize_decimal(field, value):
+    """Quantize to the field's decimal places; ValidationError naming the field if impossible."""
+    if not value.is_finite():
+        raise ValidationError({field.name: "Must be a finite number."})
+    try:
+        return value.quantize(Decimal(1).scaleb(-field.decimal_places), context=_WIDE)
+    except InvalidOperation:
+        raise ValidationError({field.name: "Number is out of range."})
 
 
 class ImmutableRecordError(Exception):
@@ -143,7 +156,7 @@ class ProvenancedRecord(models.Model):
                 continue
             value = field.to_python(getattr(self, field.attname))
             if isinstance(value, Decimal):
-                value = value.quantize(Decimal(1).scaleb(-field.decimal_places))
+                value = quantize_decimal(field, value)
             out[field.name] = value
         return out
 
@@ -162,17 +175,19 @@ class ProvenancedRecord(models.Model):
     def validate(self):
         """Field and model validation; cid is set on save."""
         # Trailing zeros are not extra precision: Decimal("97.80") is 97.8.
+        errors = {}
         for field in self._meta.concrete_fields:
             if isinstance(field, models.DecimalField):
                 try:
                     value = field.to_python(getattr(self, field.attname))
-                except ValidationError:
-                    continue  # reported by full_clean below
-                if isinstance(value, Decimal) and value.is_finite():
-                    places = Decimal(1).scaleb(-field.decimal_places)
-                    if value == value.quantize(places):
-                        value = value.quantize(places)
-                    setattr(self, field.attname, value)
+                    if isinstance(value, Decimal):
+                        quantized = quantize_decimal(field, value)
+                        if value == quantized:
+                            setattr(self, field.attname, quantized)
+                except ValidationError as exc:
+                    errors.update(exc.message_dict if hasattr(exc, "error_dict") else {field.name: exc.messages})
+        if errors:
+            raise ValidationError(errors)
         self.full_clean(exclude=["cid"], validate_unique=False)
 
     def save(self, *args, **kwargs):
@@ -206,7 +221,7 @@ class DailySnapshot(ProvenancedRecord):
         MANUAL = "manual"
 
     # Body-composition readings that a post-sauna BIA makes invalid.
-    BODY_COMPOSITION_FIELDS = ("body_fat_pct", "skeletal_muscle_kg", "bmr_kcal")
+    BODY_COMPOSITION_FIELDS = ("weight_kg", "body_fat_pct", "skeletal_muscle_kg", "bmr_kcal")
 
     date = models.DateField()
     sleep_score = models.PositiveSmallIntegerField(null=True, blank=True, validators=PCT)
@@ -215,12 +230,22 @@ class DailySnapshot(ProvenancedRecord):
     sleep_duration_min = models.PositiveSmallIntegerField(
         null=True, blank=True, validators=[MaxValueValidator(1440)]
     )
-    resting_hr_sleep = models.PositiveSmallIntegerField(null=True, blank=True)
-    hrv = models.PositiveSmallIntegerField(null=True, blank=True)
+    resting_hr_sleep = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(20), MaxValueValidator(150)]
+    )
+    hrv = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(300)]
+    )
     spo2 = models.DecimalField(
         max_digits=4, decimal_places=1, null=True, blank=True, validators=PCT
     )
-    weight_kg = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    weight_kg = models.DecimalField(
+        max_digits=5,
+        decimal_places=1,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(30), MaxValueValidator(300)],
+    )
     body_fat_pct = models.DecimalField(
         max_digits=4, decimal_places=1, null=True, blank=True, validators=PCT
     )
