@@ -334,6 +334,7 @@ class ProbeSession(ProvenancedRecord):
         PUZZLE_SET = "puzzle_set"
         RAPID_GAME = "rapid_game"
         MODULE = "module"
+        MINI_PUZZLE = "mini_puzzle"  # about 5 puzzles between work blocks (M3)
 
     class Location(models.TextChoices):
         OFFICE = "office"
@@ -376,6 +377,12 @@ class ProbeSession(ProvenancedRecord):
 
 class WorkBlock(ProvenancedRecord):
     record_kind = "work_block"
+    OMIT_IF_NULL = ("posture", "planned_length_min")
+
+    class Posture(models.TextChoices):
+        SIT = "sit"
+        STAND = "stand"
+        MIXED = "mixed"
 
     class TaskType(models.TextChoices):
         CODE = "code"
@@ -401,6 +408,12 @@ class WorkBlock(ProvenancedRecord):
         null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)]
     )
     notes = models.TextField(blank=True)
+    # Added in M3 (both in OMIT_IF_NULL, so earlier CIDs are unchanged).
+    posture = models.CharField(max_length=8, choices=Posture.choices, null=True, blank=True)
+    planned_length_min = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(240)],
+        help_text="Pomodoro length the block was planned at, e.g. 25, 40 or 50.",
+    )
 
     class Meta:
         ordering = ["-start"]
@@ -424,6 +437,28 @@ class WorkBlock(ProvenancedRecord):
         """Derived, never stored."""
         return self.end - self.start
 
+    # CID of the block this one corrects; set by the correction path so the
+    # correction may overlap the record it replaces. Not a field, not in the CID.
+    replaces_cid = None
+
+    def overlapping(self):
+        """Current blocks of the same contributor that overlap this one (touching is fine).
+
+        Excludes the block being corrected and an identical record (same CID),
+        which is a duplicate, not an overlap.
+        """
+        others = WorkBlock.objects.current().filter(
+            contributor_id=self.contributor_id, start__lt=self.end, end__gt=self.start
+        )
+        if self.pk:
+            others = others.exclude(pk=self.pk)
+        skip = {self.replaces_cid} if self.replaces_cid else set()
+        try:
+            skip.add(self.compute_cid())
+        except (ValidationError, Contributor.DoesNotExist):
+            pass
+        return others.exclude(cid__in=skip)
+
     def clean(self):
         super().clean()
         if self.start and self.end and self.end <= self.start:
@@ -432,6 +467,160 @@ class WorkBlock(ProvenancedRecord):
             value = getattr(self, name)
             if value is not None and not 1 <= value <= 5:
                 raise ValidationError(f"{name} must be between 1 and 5.")
+        if self.contributor_id and isinstance(self.start, datetime.datetime) and isinstance(self.end, datetime.datetime):
+            clash = self.overlapping().first()
+            if clash is not None:
+                tz = self.contributor.tzinfo
+                s, e = clash.start.astimezone(tz), clash.end.astimezone(tz)
+                raise ValidationError(
+                    f"Overlaps work block {s:%Y-%m-%d %H:%M}-{e:%H:%M} {self.contributor.timezone} "
+                    f"({clash.cid[:12]}); correct that block instead of adding an overlapping one."
+                )
+
+    def save(self, *args, **kwargs):
+        """Serializes the overlap check and insert per contributor (row lock), so two
+        concurrent overlapping blocks cannot both pass validation."""
+        if not self._state.adding:
+            return super().save(*args, **kwargs)  # raises ImmutableRecordError
+        with transaction.atomic():
+            Contributor.objects.select_for_update().get(pk=self.contributor_id)
+            super().save(*args, **kwargs)
+
+class DiscomfortCheck(ProvenancedRecord):
+    """A quick discomfort rating. sharp_or_numb is a stop signal, not a score."""
+
+    record_kind = "discomfort_check"
+
+    class Area(models.TextChoices):
+        NECK = "neck"
+        SHOULDER = "shoulder"
+        WRIST = "wrist"
+        HIP = "hip"
+        LOW_BACK = "low_back"
+        OTHER = "other"
+
+    class Trigger(models.TextChoices):
+        END_OF_COMMUTE = "end_of_commute"
+        END_OF_MEETING = "end_of_meeting"
+        END_OF_BLOCK = "end_of_block"
+        STANDING_LONG = "standing_long"
+        OTHER = "other"
+
+    class Countermove(models.TextChoices):
+        NONE = "none"
+        HIP_FLEXOR = "hip_flexor"
+        CHIN_TUCK_PULLAPART = "chin_tuck_pullapart"
+        WRIST_MOBILITY = "wrist_mobility"
+        DEAD_HANG = "dead_hang"
+        CALF_WEIGHT_SHIFT = "calf_weight_shift"
+        WALK = "walk"
+        OTHER = "other"
+
+    at = models.DateTimeField()
+    area = models.CharField(max_length=16, choices=Area.choices)
+    score = models.PositiveSmallIntegerField(validators=[MaxValueValidator(10)])
+    trigger = models.CharField(max_length=16, choices=Trigger.choices)
+    countermove = models.CharField(max_length=24, choices=Countermove.choices, default=Countermove.NONE)
+    sharp_or_numb = models.BooleanField(
+        default=False, help_text="Sharp pain or numbness: stop the block and get it checked by a professional."
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-at"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(score__lte=10), name="discomfortcheck_score_0_10"),
+        ]
+
+    def __str__(self):
+        return f"{self.area} {self.score} {self.at:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+
+class Reset(ProvenancedRecord):
+    """A short reset between work blocks, bracketed by two mini-probes.
+
+    before_probe_cid / after_probe_cid are plain CID strings (same rule as
+    Supersession). kind "none" is the control condition.
+    """
+
+    record_kind = "reset"
+
+    class Kind(models.TextChoices):
+        WALK = "walk"
+        COLD_SHOWER = "cold_shower"
+        DEAD_HANG_MOBILITY = "dead_hang_mobility"
+        BREATHING = "breathing"
+        NAP = "nap"
+        NONE = "none"
+
+    at = models.DateTimeField()
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    duration_min = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(240)])
+    before_probe_cid = models.CharField(max_length=128, help_text="CID of the mini_puzzle session taken before.")
+    after_probe_cid = models.CharField(max_length=128, help_text="CID of the mini_puzzle session taken after.")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-at"]
+
+    def __str__(self):
+        return f"{self.kind} {self.at:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+    def clean(self):
+        super().clean()
+        if not (self.contributor_id and isinstance(self.at, datetime.datetime)):
+            return
+        errors = {}
+        for name, side in (("before_probe_cid", "before"), ("after_probe_cid", "after")):
+            cid = getattr(self, name)
+            if not cid:
+                continue  # required-field error comes from field validation
+            session = ProbeSession.objects.current().filter(cid=cid).first()
+            if session is None:
+                errors[name] = "Must be the CID of a current probe session."
+            elif session.contributor_id != self.contributor_id:
+                errors[name] = "Must be a probe session of the same contributor."
+            elif session.kind != ProbeSession.Kind.MINI_PUZZLE:
+                errors[name] = "Must be a mini_puzzle session."
+            elif side == "before" and not session.started_at < self.at:
+                errors[name] = "The before probe must start before the reset."
+            elif side == "after" and not session.started_at > self.at:
+                errors[name] = "The after probe must start after the reset."
+        if errors:
+            raise ValidationError(errors)
+
+
+class WeeklyCheck(ProvenancedRecord):
+    """Weekly self-rated burnout check. Only the instrument name and score are
+    stored; questionnaire item text is never stored or shipped."""
+
+    record_kind = "weekly_check"
+
+    week_start = models.DateField(help_text="Local Monday of the week.")
+    instrument = models.CharField(max_length=100, help_text="Name of the questionnaire used.")
+    score = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(0)])
+    scale_max = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-week_start"]
+
+    def __str__(self):
+        return f"{self.instrument} {self.week_start} {self.score}/{self.scale_max} {self.cid[:12]}"
+
+    def clean(self):
+        super().clean()
+        if isinstance(self.week_start, datetime.date) and self.week_start.weekday() != 0:
+            raise ValidationError({"week_start": "week_start must be a Monday."})
+        if self.instrument is not None and not self.instrument.strip():
+            raise ValidationError({"instrument": "Name the questionnaire used."})
+        try:
+            score, scale_max = Decimal(str(self.score)), Decimal(str(self.scale_max))
+        except (InvalidOperation, TypeError, ValueError):
+            return  # field validation reports it
+        if score.is_finite() and scale_max.is_finite() and score > scale_max:
+            raise ValidationError({"score": "score cannot exceed scale_max."})
+
 
 class ProbeBaseline(models.Model):
     """Owner-set baseline window for one probe kind.

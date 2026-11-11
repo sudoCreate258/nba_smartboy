@@ -71,6 +71,100 @@
 - Merge style: merge commits (no squash), so the `M<n>-T<k>` history stays; delete branches after merge.
 - Planner edits in the working tree: the planner writes only `docs/DECISIONS.md` and `.kiro/`. The builder commits them in a separate commit `planner: <summary>` before its own work, never with `git commit -a`. The swept-in edits in `8ae1479` are intended and can stay.
 
+### Planner answers to the M2 review (2026-11-11)
+- "ratio" label on the `move_time_cv` admin column: add in M3-T0.
+- Overlapping WorkBlocks: validation rejects a WorkBlock that overlaps another current WorkBlock of the same contributor (touching end == start is fine). Work-hours sums also merge overlapping intervals as a guard. Tests for both, in M3-T0.
+- Rolling medians with fewer than 3 sessions: keep as is (flags already need 3 scored sessions); add one test that documents it, in M3-T0.
+
+### Owner decisions: alignment with Techno Rave (#0.1) and the Nymbus Program deck (2026-11-11)
+Program map: Nymbus Program Phase 1 "Techno Rave" (liftoff: capture, store, analyze, share) = Nymbus architecture phases 1–3; Program Phase 2 "Tree Hugger" (LLC -> nonprofit, modules and shared data, edu material, homestead DIY); Program Phase 3 "Piggy Bank" (user revenue share, memberships, licensing, shared live feed) = Nymbus phase 4+.
+- **Data domain:** fitness first. "Dropped data" was Techno Rave framing, not a requirement. Fitness data is concrete (wearables, smart devices, later camera-based posture). Phone app-usage capture can return later as an adapter.
+- **Storage:** Google Drive / Google Cloud is not the default. Local PostgreSQL stays. The getting-started guide stays stack-agnostic ("choose your own stack"): adopters may finish setup with their preferred tools and document what they used. The "our data" boundary must not depend on any local stack choice, so a stable interchange contract (record format, CID, encryption) is required before Nymbus phase 2.
+- **CI:** GitHub Actions replaces Travis CI. Close enough to plan.
+- **Client:** phone-friendly web app (installable, works on older phones) in M4; Flutter later; keep both doors open. Hardware targets include repurposed old phones and a Raspberry Pi as a mobile mini edge server.
+- **Resilience principle:** the twin must work fully offline on low-power local hardware (no internet, no cloud dependency). Decentralized, locally maintainable.
+- **Privacy and sharing:** the Nymbus approach (federated learning + differential privacy, client-side encryption before anything leaves the device). Not homomorphic encryption.
+- **Rendez-Vous:** parked until the fitness MVP is set up; then built in parallel. Fitness and Rendez-Vous are the first two marketplace modules.
+- **Camera posture tracking:** future adapter. Use an open-source pose-estimation library with a license compatible with AGPL (to be confirmed per library); video/images never leave the device and are not stored by default, only derived skeleton keypoints.
+- **Renaissance Periodization:** a partnership goal (form, nutrition, plateau tracking), not a code dependency. No public RP API is known.
+- **Revenue model (direction, not built):** free for users who participate in an anonymous docuseries/user-story program; user setup stories market the project; early adopters get a "stake" and rewards (Time Coin; shared-commute-as-a-service idea parked). Anything involving stakes, tokens or rewards stays behind the Nymbus phase 4 legal review. "Anonymous" and "docuseries" need a definition before launch (filmed people are identifiable), and free access tied to participation must not be tied to research consent.
+- **Governance (direction):** a nonprofit runs a worker co-op. The co-op arm generates revenue from members' skills democratically; the nonprofit holds surplus, which members and affected communities debate. Exact structure depends on revenue scale; legal review before filings. Lion13 Software, LLC (NY) will need updated paperwork before receiving funding.
+- **Funding:** NSF PESOSE after there are more users. NSF SBIR Project Pitch and NLnet remain candidates.
+
+### Owner decisions: anonymity, consent and legal timing (2026-11-11)
+- **Development is not slowed by legal work.** Legal steps are checkpoints tied to milestones, not prerequisites for coding.
+- **Participant identity:** participants are referred to only by codes (study/trial #NNN, region #XXX). Codes are pseudonymous, not anonymous, so: no names, faces, voices or exact dates in any public material; public numbers are aggregates with at least 10 people per reported group (smaller groups are merged or suppressed).
+- **Marketing media:** commercials and the docuseries use hired actors or animation (e.g. claymation) dramatizing aggregated before/after experiences. Every piece states it is a dramatization with actors and that results vary; no actor is presented as a real participant.
+- **Consent:** framed as ethical AI use, in plain language: per-category, opt-in, revocable at any time (M5 permissions), shown before any data leaves the device, and never a condition of free access. A research use by an institution adds that institution's own consent and ethics review.
+- **Wording:** call it a "pilot" or "user study" publicly until an institutional partner with an ethics board (IRB) runs it; "clinical trial" is used only then.
+- **Legal checkpoints (owner gates):**
+  1. Before the first user other than Mike stores data on a shared server (Nymbus phase 2): privacy notice, consent flow, breach-notification plan.
+  2. Before accepting money beyond small tips (grants, sponsorships, revenue): entity paperwork for Lion13 Software, LLC; tips reported as income.
+  3. Before any "clinical trial" use: institutional partner + IRB.
+  4. Before stakes, tokens or rewards with monetary value: Nymbus phase 4 legal review.
+
+### Owner direction: "our data" transition and the Coding Village institution (2026-11-11)
+- Source: "Coding Days" deck (SUNY Orange Computer and Technology Department, dev group). The institution that runs "our data" is a Coding Village: ranks Genin -> Chunin -> Jounin/ANBU -> Kage (Hokage); Power Groups (Communication, Source Code, Hardware, and mixed Purple/Orange/Green).
+- **The twin is the entry project.** Path to Genin requires implementing a self-tracking open-source project; Chunin registration includes a proxy to the participant's self-tracking software, tested yearly against software updates. So the getting-started guide doubles as the Genin curriculum, and "choose your own stack" setups are part of the evaluation.
+- **Hokage runs a local OurData server** and must exchange and host backups with at least two other Hokage. This defines the transition step.
+- **P1.5 "OurData backup" (between Nymbus phase 1 and 2):**
+  - A member's instance encrypts its "my data" export (M4) on the device and sends it to their village's OurData server.
+  - The OurData server stores ciphertext only and cannot read it; it replicates the ciphertext to at least two peer OurData servers.
+  - Restore works on a fresh instance with the member's key; CIDs are identical after restore.
+  - No analysis, sharing or payout on the server in P1.5 (that is Nymbus phase 2+).
+  - Prerequisites: M4 export format, M6 HTTPS and signed images. Legal checkpoint 1 applies (privacy notice, consent, breach plan), because other people's data, even encrypted, sits on a shared server.
+- **Fit with existing milestones:** Coding Days scenario 4 (ergonomic, skeletal and visual strain from heavy computer use) is what M3 measures.
+- **Points that need owner decisions before Nymbus phase 2 (recorded, not decided):**
+  1. The deck's base-rate model sells and loans anonymized usage data, demographic information and testimonials to third parties, priced by user demographic. This conflicts with the per-category, revocable consent decided earlier and with avoiding demographic data. Selling health data also triggers stricter privacy laws.
+  2. "Attention stock market" falls under the Nymbus phase 4 legal review.
+  3. Rank-based approval (Kage approves contracts) vs the worker co-op's democratic model: define which decisions are democratic and which are delegated.
+  4. Health insurance for Chunin implies an employer: decide which entity employs members.
+  5. "Kickback" to host governments: call it a revenue share with host communities and define it in the governance documents.
+
+### Owner direction on village governance (2026-11-11)
+- **Data sales happen at village level, not centrally.** A village (local) that sells data has more agency and less hidden resale than a central board (compare local vs state government). Demographic attributes may be used for pricing at village level. Safeguards to design before Nymbus phase 2: each sale approved through the village process, aggregation thresholds (at least 10 people per reported group, as already decided), per-category consent still applies, and a public log of sales per village.
+- **Kage as public face.** Decisions are handled by the Kage rather than put to every user directly; ANBU provide internal checks (internal affairs, compliance, security). The path to Hokage builds in data-management duties. The balance between Kage authority and the worker co-op's democratic votes is defined in the governance documents.
+- **Health insurance and retirement:** aim to partner directly with physicians and medical professionals so a basic package is a standard minimum for members, not a novelty. Likely easier to pilot in Europe or Canada. Needs legal review per country (legal checkpoint 2).
+- **Tag cleanup:** the mistaken `v0.2.0` tag on `73b5e75` is deleted (owner, 2026-11-11).
+
+### M3 builder choices (builder, 2026-11-11)
+Choices the spec left open. Owner or planner may overrule.
+- **Overlap rule and corrections:** a WorkBlock correction may overlap the block it replaces (the admin passes the source CID through `replaces_cid`, which is not a field and not in the CID). An identical block is a duplicate, not an overlap.
+- **42-day default baseline:** measured from the first to the 10th session's `started_at`; exactly 42 days is accepted. A configured ProbeBaseline has no span limit.
+- **Zone amber prior weeks:** the 3 calendar weeks right before the week. Each must have work blocks; a week without blocks is missing data, not rest, so the result is "insufficient data". Prior mean share 0 never raises amber.
+- **Theta IQR:** inclusive quartiles; one block gives q1 = q3 = median.
+- **Reported weeks:** `zone_report` shows the `--weeks` local weeks ending with the week of `--until` (default: today). Discomfort, stop signals and weekly checks are limited to those weeks; zone amber still looks at earlier weeks; reset effect uses all resets up to the end of the window (more data, n < 5 marking still applies).
+- **Reset references:** validated at save time (current `mini_puzzle` of the same contributor, before < at < after). In the report a referenced probe that was corrected later is followed to its current version.
+- **WeeklyCheck score:** decimal (2 places), because some instruments report a mean rather than a whole-number total; `0 <= score <= scale_max`.
+- **mini_puzzle** is a scored kind in `probe_report` like the others (own baseline, same flag rules); `zone_report` lists every kind's probe flag.
+
+### M3 semantic review fixes (builder, 2026-11-11)
+Two-model review of PR #6: 19 issues (4 High, 8 Medium, 7 Low); report in `.agents/reviews/` (gitignored). Fixed:
+- Reset effect: sample size and "interpretable" are per metric (usable before/after pairs), not per Reset row; `vs none` is marked underpowered unless both sides have n >= 5 (High #1, #4).
+- Zone totals and focus minutes use the union of block intervals, so overlapping rows stored before the overlap rule are counted once (High #2).
+- Reset probes are resolved through corrections and then rechecked against the Reset's rules (same contributor, `mini_puzzle`, before < at < after); failing or unresolvable resets are listed as excluded and not counted; resets using corrected probes are counted in the output (High #3, Medium #6). Resolution is one in-memory pass (Medium #8).
+- `WorkBlock.save()` takes the contributor row lock around the overlap check and insert (Medium #5). Clash messages show local time and zone (Medium #10).
+- Stop signals before the reported weeks are counted on one line (Medium #11). `--until` documented as "the whole week containing this date" (Medium #12). The work-block query is bounded to the window plus the 3-week amber lookback (Medium #8).
+- Free-text notes are never part of report output, text or JSON (Medium #7). Rule for M4 export: decide separately (export is the user's own data).
+- Small: zero-minute weeks are "insufficient data" in amber (#16); the JSON hook raises on unknown types (#17); the probe renderer uses `DEFAULT_BASELINE_N` (#14); tests for falling-hours amber, contributor isolation and midweek `--until` (#19).
+Deferred (non-blocking, listed for the planner): a shared write helper for corrections and duplicate checks used by admin and future write paths (#9, before M4 forms); a stable reason code for baseline failures in JSON (#13, before M4); no uniqueness rule for WeeklyCheck per week and instrument (#15); mini_puzzle flagging with about 5 items per session (#18, owner decision).
+
+### Planner answers to M3 (2026-11-11)
+- M3 builder choices accepted.
+- Demographic pricing (owner clarification): its purpose is to put a tangible value on data from different groups to see where costs can be cut or optimized. It runs only on aggregates (at least 10 people per group), never on individual-level demographic records.
+- v0.2.0 = `main` at `b22e433` (PR #5). Tagged by the owner.
+
+### Planner: training log, camera adapter, debug (2026-11-11)
+- M3.5 Training log added before M4 so RP-style training data (sets, reps, load, RIR, pump, soreness, joint pain, mesocycle week/deload) can be logged now. Manual entry and CSV import; no RP API dependency.
+- Camera-based posture/pose tracking (two cameras for 3D) is a later adapter (M7, spec after M4). Rules already decided: video stays on the device and is not stored by default; only derived keypoints become records; library license must be AGPL-compatible.
+- Debug: on for local development only until M4 makes debug-off fully usable.
+
+### Owner direction: cloud storage, modules and local models (2026-11-11)
+- **Cloud storage is a backup target, not the database.** The owner has 1 TB of unused cloud storage (more than local disk). M4.5 adds client-side encrypted backups pushed during off-hours with a bandwidth limit, to a remote the user chooses; first target is Google Drive via rclone (its `crypt` remote encrypts before upload). The remote holds ciphertext only; keys stay local; losing the key loses the backup, so the README covers key backup. PostgreSQL stays the live store.
+- **Off-hours is also when heavy local compute runs** (model training, pose processing), not just uploads. Federated learning is about training without pooling raw data; it is not a storage method.
+- **Modular UI and local models.** Every feature is a module with a manifest: id, version, record kinds it reads (by data category), kinds it writes, compute profile (on-demand or off-hours; CPU/GPU hint), and what it may share. The core enforces the user's per-module, per-category grants (M5 permissions extend to modules). Modules and local models can be added or removed to personalize the experience; a removed module loses access immediately; its outputs stay as records with provenance.
+- **First modules:** probes, zone, training (M3.5), later pose (M7) and Rendez-Vous. This is the seed of the Nymbus module marketplace; the manifest format should move into the Nymbus doc once stable.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
@@ -79,7 +173,8 @@
 - GitHub remote: `sudoCreate258/nba_smartboy` (private). README badge updated; CI has not run on GitHub yet until the first push.
 
 ## Status
-- M3: spec written (`.kiro/specs/m3-work-zone/`). Not started; starts after the M2 PR is merged.
+- Release v0.2.0 (M1 + M1.1 + M2): owner approved in chat 2026-11-11; PR #5 `develop` -> `main` merged at `b22e433`; CI on `main` green (https://github.com/sudoCreate258/nba_smartboy/actions/runs/43084786354). Tag by the owner.
+- M3: built (T0-T8, spec `.kiro/specs/m3-work-zone/`) on `feature/m3-work-zone`. Verified 2026-11-11: `docker compose exec web pytest` ran 299 passed (M2 was 209), 314 after the review fixes; `makemigrations --check --dry-run` reports no changes; pinned pre-M2 ProbeSession and pre-M3 WorkBlock CIDs unchanged. Migrations 0011-0014 are additive only. Shipped: T0 (42-day default baseline, "ratio" label, WorkBlock overlap rule + merged-interval sums, early-median test), WorkBlock `posture`/`planned_length_min` (OMIT_IF_NULL), DiscomfortCheck, `mini_puzzle` kind, Reset, WeeklyCheck, `twin_metrics/zone.py`, `zone_report` (text and `--json`), README section. GitHub Actions run: see the M3 PR.
 - M1: built (T1–T10). T0 decided (AGPL-3.0-or-later). Baseline verified at M1.1 start: `docker compose exec web pytest` ran 76 passed (earlier figures of 59 and 76 were unverified).
 - M2: built (T0-T8, spec `.kiro/specs/m2-probe-log/`). Verified 2026-11-11: `docker compose exec web pytest` ran 209 passed (M1.1 baseline was 138); `makemigrations --check --dry-run` reports no changes. GitHub Actions run: https://github.com/sudoCreate258/nba_smartboy/actions/runs/43067143291.
   - Shipped: T0 housekeeping (admin bad `supersedes` is a form error, DST ambiguous/nonexistent ingest times rejected, SPDX on 0008, `.agents/` ignored); `OMIT_IF_NULL` canonicalization rule with pinned pre-M2 CIDs; `ProbeSession.move_time_cv` (migration 0009); `ProbeBaseline` (migration 0010, no CID); `twin_metrics/probes.py` (plain Python statistics); sleep and work conditions and `kind_report` in `core/services/probe_report.py` (`core/services.py` became the `core/services/` package, imports unchanged); `probe_report` command (text and `--json`); README section.
