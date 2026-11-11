@@ -579,6 +579,38 @@ class Reset(ProvenancedRecord):
             raise ValidationError(errors)
 
 
+class WeeklyCheck(ProvenancedRecord):
+    """Weekly self-rated burnout check. Only the instrument name and score are
+    stored; questionnaire item text is never stored or shipped."""
+
+    record_kind = "weekly_check"
+
+    week_start = models.DateField(help_text="Local Monday of the week.")
+    instrument = models.CharField(max_length=100, help_text="Name of the questionnaire used.")
+    score = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(0)])
+    scale_max = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-week_start"]
+
+    def __str__(self):
+        return f"{self.instrument} {self.week_start} {self.score}/{self.scale_max} {self.cid[:12]}"
+
+    def clean(self):
+        super().clean()
+        if isinstance(self.week_start, datetime.date) and self.week_start.weekday() != 0:
+            raise ValidationError({"week_start": "week_start must be a Monday."})
+        if self.instrument is not None and not self.instrument.strip():
+            raise ValidationError({"instrument": "Name the questionnaire used."})
+        try:
+            score, scale_max = Decimal(str(self.score)), Decimal(str(self.scale_max))
+        except (InvalidOperation, TypeError, ValueError):
+            return  # field validation reports it
+        if score.is_finite() and scale_max.is_finite() and score > scale_max:
+            raise ValidationError({"score": "score cannot exceed scale_max."})
+
+
 class ProbeBaseline(models.Model):
     """Owner-set baseline window for one probe kind.
 
