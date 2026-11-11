@@ -376,6 +376,12 @@ class ProbeSession(ProvenancedRecord):
 
 class WorkBlock(ProvenancedRecord):
     record_kind = "work_block"
+    OMIT_IF_NULL = ("posture", "planned_length_min")
+
+    class Posture(models.TextChoices):
+        SIT = "sit"
+        STAND = "stand"
+        MIXED = "mixed"
 
     class TaskType(models.TextChoices):
         CODE = "code"
@@ -401,6 +407,12 @@ class WorkBlock(ProvenancedRecord):
         null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)]
     )
     notes = models.TextField(blank=True)
+    # Added in M3 (both in OMIT_IF_NULL, so earlier CIDs are unchanged).
+    posture = models.CharField(max_length=8, choices=Posture.choices, null=True, blank=True)
+    planned_length_min = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(240)],
+        help_text="Pomodoro length the block was planned at, e.g. 25, 40 or 50.",
+    )
 
     class Meta:
         ordering = ["-start"]
