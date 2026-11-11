@@ -117,6 +117,21 @@ def flag(z_series, sleep_falling=None, work_rising=None):
     return "none", []
 
 
+def deviates(value, baseline_values, worse, k=1.0):
+    """Is `value` at least k sample SDs worse than the mean of baseline_values?
+
+    worse is 'lower' (sleep) or 'higher' (work hours). Returns None (insufficient
+    data) when value is missing, there are fewer than two baseline values, or their SD is 0.
+    """
+    if value is None or len(baseline_values) < 2:
+        return None
+    sd = statistics.stdev(baseline_values)
+    if not sd:
+        return None
+    gap = statistics.fmean(baseline_values) - value if worse == LOWER else value - statistics.fmean(baseline_values)
+    return gap >= k * sd
+
+
 def evaluate_kind(kind, baseline_sessions, later_sessions, sleep_falling=None, work_rising=None):
     """Full result for one probe kind from plain-dict sessions (oldest first)."""
     metrics = METRICS[kind]

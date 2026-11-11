@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Django side of the probe report: picks sessions and baseline windows."""
-from ..models import ProbeBaseline, ProbeSession
+import datetime
+
+from twin_metrics import probes
+
+from ..models import DailySnapshot, ProbeBaseline, ProbeSession, WorkBlock
 
 DEFAULT_BASELINE_N = 10
 SCORED_KINDS = (ProbeSession.Kind.PUZZLE_SET, ProbeSession.Kind.RAPID_GAME)
@@ -43,3 +47,112 @@ def baseline_window(contributor, kind, sessions=None):
         "baseline": baseline,
         "after": after,
     }
+
+LOAD_DAYS = 3  # days (and nights) behind the sleep and work conditions
+
+
+def _local_date(moment, tz):
+    return moment.astimezone(tz).date()
+
+
+def _day_start(day, tz):
+    return datetime.datetime.combine(day, datetime.time.min, tzinfo=tz)
+
+
+def sleep_falling(contributor, window, latest):
+    """Is the mean sleep_score of the last 3 nights >= 1 SD below the baseline nights' mean?
+
+    The nights are the 3 local days ending on the day of `latest` (a session).
+    Returns {"state": True/False/None, "detail": str}; None means insufficient data.
+    """
+    tz = contributor.tzinfo
+    current = DailySnapshot.objects.current().filter(contributor=contributor, sleep_score__isnull=False)
+    if latest is None or window["start"] is None:
+        return {"state": None, "detail": "insufficient data: no sessions"}
+    end_day = _local_date(latest.started_at, tz)
+    recent_days = [end_day - datetime.timedelta(days=i) for i in range(LOAD_DAYS)]
+    recent = list(current.filter(date__in=recent_days).values_list("sleep_score", flat=True))
+    baseline = list(
+        current.filter(
+            date__range=(_local_date(window["start"], tz), _local_date(window["end"], tz))
+        ).values_list("sleep_score", flat=True)
+    )
+    if len(recent) < LOAD_DAYS:
+        return {"state": None, "detail": f"insufficient data: {len(recent)} of {LOAD_DAYS} recent nights have a sleep score"}
+    state = probes.deviates(sum(recent) / len(recent), baseline, probes.LOWER)
+    if state is None:
+        return {"state": None, "detail": f"insufficient data: {len(baseline)} baseline nights (need 2 with varying scores)"}
+    return {"state": state, "detail": f"last {LOAD_DAYS} nights mean {sum(recent) / len(recent):.1f} vs {len(baseline)} baseline nights"}
+
+
+def _hours_in(blocks, start, end):
+    total = 0.0
+    for b in blocks:
+        overlap = (min(b.end, end) - max(b.start, start)).total_seconds()
+        total += max(overlap, 0.0) / 3600
+    return total
+
+
+def work_rising(contributor, window, latest):
+    """Are the work hours of the 3 local days up to `latest` >= 1 SD above the baseline's mean 3-day total?
+
+    Baseline totals are every 3-day window that lies inside the baseline window and holds at
+    least one WorkBlock; days without blocks are never counted as zero hours on their own.
+    Returns {"state": True/False/None, "detail": str}; None means insufficient data.
+    """
+    tz = contributor.tzinfo
+    if latest is None or window["start"] is None:
+        return {"state": None, "detail": "insufficient data: no sessions"}
+    span = datetime.timedelta(days=LOAD_DAYS)
+    blocks = list(WorkBlock.objects.current().filter(contributor=contributor))
+    end_day = _local_date(latest.started_at, tz)
+    recent_start = _day_start(end_day - datetime.timedelta(days=LOAD_DAYS - 1), tz)
+    recent_end = _day_start(end_day + datetime.timedelta(days=1), tz)
+    if not any(b.end > recent_start and b.start < recent_end for b in blocks):
+        return {"state": None, "detail": f"insufficient data: no work blocks in the last {LOAD_DAYS} days"}
+    first, last = _local_date(window["start"], tz), _local_date(window["end"], tz)
+    totals = []
+    day = first + datetime.timedelta(days=LOAD_DAYS - 1)
+    while day <= last:
+        start = _day_start(day - datetime.timedelta(days=LOAD_DAYS - 1), tz)
+        end = _day_start(day + datetime.timedelta(days=1), tz)
+        if any(b.end > start and b.start < end for b in blocks):
+            totals.append(_hours_in(blocks, start, end))
+        day += datetime.timedelta(days=1)
+    recent = _hours_in(blocks, recent_start, recent_end)
+    state = probes.deviates(recent, totals, probes.HIGHER)
+    if state is None:
+        return {"state": None, "detail": f"insufficient data: {len(totals)} baseline 3-day windows with work blocks (need 2 with varying totals)"}
+    return {"state": state, "detail": f"last {LOAD_DAYS} days {recent:.1f} h vs {len(totals)} baseline windows"}
+
+
+def session_dict(session):
+    """Plain dict of the scored metrics, floats or None, for twin_metrics.probes."""
+    return {
+        name: None if getattr(session, name) is None else float(getattr(session, name))
+        for name, _ in probes.METRICS[session.kind]
+    }
+
+
+def kind_report(contributor, kind):
+    """Evaluate one scored kind end to end; returns probes.evaluate_kind's dict plus context."""
+    sessions = current_sessions(contributor, kind)
+    window = baseline_window(contributor, kind, sessions)
+    latest = sessions[-1] if sessions else None
+    sleep = sleep_falling(contributor, window, latest)
+    work = work_rising(contributor, window, latest)
+    result = probes.evaluate_kind(
+        kind,
+        [session_dict(s) for s in window["baseline"]],
+        [session_dict(s) for s in window["after"]],
+        sleep_falling=sleep["state"],
+        work_rising=work["state"],
+    )
+    result.update(
+        baseline_source=window["source"],
+        baseline_start=window["start"],
+        baseline_end=window["end"],
+        sleep=sleep,
+        work=work,
+    )
+    return result
