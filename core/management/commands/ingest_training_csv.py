@@ -13,8 +13,9 @@ from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from core.management.commands.ingest_yaml import describe, localize
-from core.models import Contributor, TrainingSession, TrainingSet
+from core.services.common import describe, localize
+from core.models import Contributor, Lineage, TrainingSession, TrainingSet
+from core.services.training_report import current_session_for
 
 HEADER = (
     "started_at,program,mesocycle,meso_week,is_deload,location,session_rpe,order,exercise,muscle_group,"
@@ -79,13 +80,16 @@ class Command(BaseCommand):
                     if values.get("started_at") is None:
                         raise RowError("started_at is required")
                     started = localize(values["started_at"], who.tzinfo, "started_at")
-                    key = (started, values["program"])
-                    fields = {k: values[k] for k in SESSION_COLUMNS}
+                    # Group on a case- and spacing-insensitive program name, then require the exact
+                    # text to match, so a typo is an error instead of a second session.
+                    key = (started, " ".join(values["program"].split()).casefold())
+                    fields = {k: values[k] for k in SESSION_COLUMNS + ("program",)}
                     if key not in sessions:
-                        sessions[key] = (self.session(who, started, key[1], fields, counts), fields)
+                        session_fields = {k: v for k, v in fields.items() if k != "program"}
+                        sessions[key] = (self.session(who, started, values["program"], session_fields, counts), fields)
                     session, first = sessions[key]
                     if fields != first:
-                        changed = ", ".join(k for k in SESSION_COLUMNS if fields[k] != first[k])
+                        changed = ", ".join(k for k in fields if fields[k] != first[k])
                         raise RowError(f"session columns differ from the first row of this session ({changed})")
                     self.add_set(who, session, values, counts)
                 except RowError as exc:
@@ -105,6 +109,9 @@ class Command(BaseCommand):
                 unknown = [h for h in header if h not in HEADER]
                 if unknown:
                     raise CommandError(f"Unknown columns: {', '.join(unknown)}")
+                repeated = sorted({h for h in header if header.count(h) > 1})
+                if repeated:
+                    raise CommandError(f"Repeated columns: {', '.join(repeated)}")
                 missing = REQUIRED - set(header)
                 if missing:
                     raise CommandError(f"Missing required columns: {', '.join(sorted(missing))}")
@@ -123,21 +130,32 @@ class Command(BaseCommand):
             raise CommandError(f"Invalid CSV in {path}: {exc}")
 
     def session(self, who, started, program, fields, counts):
+        """The current session for these columns; follows corrections made in the admin.
+
+        Returns (session, lineage CIDs). If the row matches a session that was
+        corrected later (for example notes or ended_at added in the admin), new
+        sets attach to the current version.
+        """
         candidate = TrainingSession(contributor=who, started_at=started, program=program, **fields)
         candidate.validate()
         existing = TrainingSession.objects.filter(cid=candidate.compute_cid()).first()
         if existing is not None:
+            current = current_session_for(existing.cid, who)
+            if current is None:
+                raise RowError(f"the session {existing.cid[:12]} was replaced and its current version was not found")
             counts["session_existing"] += 1
-            return existing
+            return current, Lineage(who.pk).members(current.cid)
         candidate.save()
         counts["session_created"] += 1
-        return candidate
+        return candidate, {candidate.cid}
 
     def add_set(self, who, session, values, counts):
+        current, lineage = session
         set_fields = {k: values[k] for k in HEADER if k not in SESSION_COLUMNS + ("started_at", "program")}
-        candidate = TrainingSet(contributor=who, session_cid=session.cid, **set_fields)
-        if TrainingSet.objects.filter(cid=candidate.compute_cid()).exists():
-            counts["set_skipped"] += 1
-            return
-        candidate.save()
+        # The same set stored under an earlier version of the session is a duplicate too.
+        for cid in lineage:
+            if TrainingSet.objects.filter(cid=TrainingSet(contributor=who, session_cid=cid, **set_fields).compute_cid()).exists():
+                counts["set_skipped"] += 1
+                return
+        TrainingSet(contributor=who, session_cid=current.cid, **set_fields).save()
         counts["set_created"] += 1

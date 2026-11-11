@@ -6,10 +6,8 @@ from django.utils import timezone
 
 from twin_metrics import zone
 
-from ..models import DiscomfortCheck, ProbeSession, Reset, Supersession, WeeklyCheck, WorkBlock
+from ..models import DiscomfortCheck, Lineage, ProbeSession, Reset, WeeklyCheck, WorkBlock
 from .probe_report import SCORED_KINDS, kind_report
-
-MAX_CHAIN = 50  # guard when following corrections of a referenced probe
 
 
 def week_range(contributor, weeks, until=None):
@@ -33,21 +31,12 @@ class ProbeResolver:
 
     def __init__(self, contributor):
         self.current = {p.cid: p for p in ProbeSession.objects.current().filter(contributor=contributor)}
-        self.next = {}
-        for old, new in (Supersession.objects.filter(contributor=contributor)
-                         .order_by("id").values_list("old_cid", "new_cid")):
-            self.next[old] = new  # later events win
+        self.lineage = Lineage(contributor.pk)
 
     def resolve(self, cid):
         """(session or None, corrected: bool)."""
-        start = cid
-        for _ in range(MAX_CHAIN):
-            if cid in self.current:
-                return self.current[cid], cid != start
-            if cid not in self.next:
-                return None, False
-            cid = self.next[cid]
-        return None, False
+        found = self.lineage.resolve(cid, self.current)
+        return (None, False) if found is None else (self.current[found], found != cid)
 
 
 def current_probe(cid, contributor):

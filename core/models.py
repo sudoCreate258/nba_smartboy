@@ -127,6 +127,48 @@ class Supersession(models.Model):
         raise ImmutableRecordError("Supersession events cannot be deleted.")
 
 
+MAX_CHAIN = 50  # guard when following correction chains
+
+
+class Lineage:
+    """Correction chains of one contributor, loaded once, followed in memory.
+
+    A record's "lineage" is every CID whose chain of corrections ends at the same
+    current record. Records that point to another record by CID (sets to their
+    session, resets to their probes) use it so that correcting the target does
+    not orphan what points to it.
+    """
+
+    def __init__(self, contributor_id):
+        self.next = dict(
+            Supersession.objects.filter(contributor_id=contributor_id).order_by("id").values_list("old_cid", "new_cid")
+        )  # later events win
+
+    def resolve(self, cid, current_cids):
+        """The CID in current_cids that cid's chain ends at, or None."""
+        for _ in range(MAX_CHAIN):
+            if cid in current_cids:
+                return cid
+            if cid not in self.next:
+                return None
+            cid = self.next[cid]
+        return None
+
+    def group(self, current_cids):
+        """{member CID: current CID} for every CID whose chain ends at one of current_cids."""
+        current_cids = set(current_cids)
+        out = {cid: cid for cid in current_cids}
+        for cid in self.next:
+            found = self.resolve(cid, current_cids)
+            if found is not None:
+                out[cid] = found
+        return out
+
+    def members(self, current_cid):
+        """Every CID whose chain ends at current_cid (including itself)."""
+        return set(self.group({current_cid}))
+
+
 class ProvenancedRecord(models.Model):
     """Abstract base: immutable record keyed by a CID over its canonical content.
 
@@ -733,6 +775,8 @@ class TrainingSet(ProvenancedRecord):
 
     def clean(self):
         super().clean()
+        if self.joint_pain_area and self.joint_pain is None:
+            raise ValidationError({"joint_pain": "Give a joint pain score (0-3) when a joint-pain area is set."})
         if not self.contributor_id or not self.session_cid:
             return
         session = TrainingSession.objects.current().filter(cid=self.session_cid).first()
@@ -746,12 +790,22 @@ class TrainingSet(ProvenancedRecord):
                 skip.add(self.compute_cid())
             except (ValidationError, Contributor.DoesNotExist):
                 pass
+            # Sets attached to earlier versions of this session belong to it too.
+            lineage = Lineage(self.contributor_id).members(session.cid)
             clash = (TrainingSet.objects.current()
-                     .filter(session_cid=self.session_cid, order=self.order).exclude(cid__in=skip).first())
+                     .filter(session_cid__in=lineage, order=self.order).exclude(cid__in=skip).first())
             if clash is not None:
                 raise ValidationError(
                     {"order": f"Set {self.order} already exists in this session ({clash.cid[:12]}); correct it instead."}
                 )
+
+    def save(self, *args, **kwargs):
+        """Serializes the order check and insert per contributor (row lock)."""
+        if not self._state.adding:
+            return super().save(*args, **kwargs)  # raises ImmutableRecordError
+        with transaction.atomic():
+            Contributor.objects.select_for_update().get(pk=self.contributor_id)
+            super().save(*args, **kwargs)
 
 
 class ProbeBaseline(models.Model):

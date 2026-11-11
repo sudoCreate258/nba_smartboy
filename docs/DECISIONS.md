@@ -159,6 +159,16 @@ Choices the spec left open. Owner or planner may overrule.
 - **CSV:** required columns `started_at`, `order`, `exercise`, `muscle_group`, `reps`; other header columns may be left out (treated as empty); columns in any order; unknown columns rejected; UTF-8 with or without BOM; blank rows skipped; choice values lower-cased; rows of one session (same `started_at` + `program`) must agree on the session columns, otherwise the file is rejected. Errors name the file line.
 - **Report:** weeks by session start (local ISO week); "joint-pain sets by area" counts sets with joint pain >= 1 ("unknown" when no area); a deload week is any week with a deload session; mean RIR shows how many sets recorded RIR; free-text notes are never in report output.
 
+### M3.5 semantic review fixes (builder, 2026-11-11)
+Two-model review: 10 issues (3 High, 5 Medium, 2 Low); report in `.agents/reviews/` (gitignored). All fixed:
+- One correction-chain helper, `core.models.Lineage` (also used by the zone report's probe resolver). A session's lineage is every CID whose corrections end at it.
+- CSV import follows session corrections: a row that matches a corrected session attaches new sets to the current version, and a set already stored under an earlier version is skipped (High #1).
+- Set order is unique across the whole lineage of a session (High #2). TrainingSet inserts take the contributor row lock (Medium #5).
+- Admin: a current session lists sets attached to any of its versions; a superseded session links to its current version and has no add link (High #3).
+- The report counts sessions without sets and marks a zero-set deload week (Medium #4); it loads only sessions in the window and counts earlier stop signals in the database (Medium #6).
+- A joint-pain area needs a joint-pain score (Medium #7). `program` groups case- and spacing-insensitively but must match exactly within a session, so a typo is an error, not a second session (Medium #8). Repeated CSV columns are rejected (Low #9).
+- Shared helpers (`DISCLAIMER`, `STOP_TEXT`, `iso_default`, `localize`, `describe`) moved to `core/services/common.py` (Low #10).
+
 ### Planner answers to M3 (2026-11-11)
 - M3 builder choices accepted.
 - Demographic pricing (owner clarification): its purpose is to put a tangible value on data from different groups to see where costs can be cut or optimized. It runs only on aggregates (at least 10 people per group), never on individual-level demographic records.
@@ -183,7 +193,7 @@ Choices the spec left open. Owner or planner may overrule.
 - GitHub remote: `sudoCreate258/nba_smartboy` (private). README badge updated; CI has not run on GitHub yet until the first push.
 
 ## Status
-- M3.5: built (T1-T5, spec `.kiro/specs/m3-5-training-log/`) on `feature/m3-5-training-log` (branched from the M3 tip while PR #6 waits for CI). Verified 2026-11-11: `docker compose exec web pytest` ran 376 passed (M3 after review: 314). Migration 0015 is additive. Exact CSV header from planner message 012, pinned by a test.
+- M3.5: built (T1-T5, spec `.kiro/specs/m3-5-training-log/`) on `feature/m3-5-training-log` (branched from the M3 tip while PR #6 waits for CI). Verified 2026-11-11: `docker compose exec web pytest` ran 376 passed (M3 after review: 314), 387 after the review fixes. Migration 0015 is additive. Exact CSV header from planner message 012, pinned by a test.
 - Release v0.2.0 (M1 + M1.1 + M2): owner approved in chat 2026-11-11; PR #5 `develop` -> `main` merged at `b22e433`; CI on `main` green (https://github.com/sudoCreate258/nba_smartboy/actions/runs/43084786354). Tag by the owner.
 - M3: built (T0-T8, spec `.kiro/specs/m3-work-zone/`) on `feature/m3-work-zone`. Verified 2026-11-11: `docker compose exec web pytest` ran 299 passed (M2 was 209), 314 after the review fixes; `makemigrations --check --dry-run` reports no changes; pinned pre-M2 ProbeSession and pre-M3 WorkBlock CIDs unchanged. Migrations 0011-0014 are additive only. Shipped: T0 (42-day default baseline, "ratio" label, WorkBlock overlap rule + merged-interval sums, early-median test), WorkBlock `posture`/`planned_length_min` (OMIT_IF_NULL), DiscomfortCheck, `mini_puzzle` kind, Reset, WeeklyCheck, `twin_metrics/zone.py`, `zone_report` (text and `--json`), README section. GitHub Actions run: see the M3 PR.
 - M1: built (T1–T10). T0 decided (AGPL-3.0-or-later). Baseline verified at M1.1 start: `docker compose exec web pytest` ran 76 passed (earlier figures of 59 and 76 were unverified).

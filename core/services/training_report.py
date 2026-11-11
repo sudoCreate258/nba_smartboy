@@ -4,26 +4,21 @@ import datetime
 
 from twin_metrics import training
 
-from ..models import Supersession, TrainingSession, TrainingSet
-from .zone_report import MAX_CHAIN, week_range
+from ..models import Lineage, TrainingSession, TrainingSet
+from .zone_report import week_range
 
 
-class SessionResolver:
-    """Current training session for a referenced CID, following corrections (in memory)."""
+def current_session_for(cid, contributor):
+    """The current TrainingSession a (possibly superseded) session CID resolves to, or None."""
+    current = {s.cid: s for s in TrainingSession.objects.current().filter(contributor=contributor)}
+    found = Lineage(contributor.pk).resolve(cid, current)
+    return None if found is None else current[found]
 
-    def __init__(self, contributor):
-        self.current = {s.cid: s for s in TrainingSession.objects.current().filter(contributor=contributor)}
-        self.next = dict(Supersession.objects.filter(contributor=contributor).order_by("id")
-                         .values_list("old_cid", "new_cid"))
 
-    def resolve(self, cid):
-        for _ in range(MAX_CHAIN):
-            if cid in self.current:
-                return self.current[cid]
-            if cid not in self.next:
-                return None
-            cid = self.next[cid]
-        return None
+def sets_of(session):
+    """Current sets of a current session, including sets attached to its earlier versions."""
+    lineage = Lineage(session.contributor_id).members(session.cid)
+    return TrainingSet.objects.current().filter(session_cid__in=lineage)
 
 
 def set_dict(s, session):
@@ -36,30 +31,34 @@ def set_dict(s, session):
 
 
 def training_report(contributor, weeks=4, until=None):
-    """Weekly training summary for the given local weeks. Read-only."""
+    """Weekly training summary for the given local weeks. Read-only.
+
+    Only sessions starting in the window (and the sets attached to them or to
+    their earlier versions) are loaded; earlier stop signals are counted in the database.
+    """
     tz = contributor.tzinfo
     reported = week_range(contributor, weeks, until)
     start = datetime.datetime.combine(reported[0], datetime.time.min, tzinfo=tz)
     end = datetime.datetime.combine(reported[-1] + datetime.timedelta(days=7), datetime.time.min, tzinfo=tz)
 
-    resolver = SessionResolver(contributor)
-    sets, excluded, earlier_stops = [], [], 0
-    for s in TrainingSet.objects.current().filter(contributor=contributor):
-        session = resolver.resolve(s.session_cid)
-        if session is None:
-            excluded.append(f"set {s.order} {s.exercise} ({s.cid[:12]}): its session no longer resolves")
-            continue
-        if session.started_at < start:
-            earlier_stops += s.is_stop_signal
-            continue
-        if session.started_at < end:
-            sets.append(set_dict(s, session))
+    lineage = Lineage(contributor.pk)
+    sessions = {s.cid: s for s in TrainingSession.objects.current()
+                .filter(contributor=contributor, started_at__gte=start, started_at__lt=end)}
+    owner = lineage.group(sessions)  # any session CID -> current session CID in the window
+    sets = [set_dict(s, sessions[owner[s.session_cid]])
+            for s in TrainingSet.objects.current().filter(contributor=contributor, session_cid__in=owner)]
 
-    weekly = training.weekly_training(sets, tz)
+    earlier = TrainingSession.objects.current().filter(contributor=contributor, started_at__lt=start)
+    earlier_owner = lineage.group(earlier.values_list("cid", flat=True))
+    earlier_stops = TrainingSet.objects.current().filter(
+        contributor=contributor, session_cid__in=earlier_owner, joint_pain__gte=training.STOP_JOINT_PAIN
+    ).count()
+
+    session_dicts = [{"cid": s.cid, "started_at": s.started_at, "is_deload": s.is_deload} for s in sessions.values()]
+    weekly = training.weekly_training(sets, tz, sessions=session_dicts)
     return {
         "weeks": reported,
         "stop_signals": training.stop_signals(sets),
         "earlier_stop_signals": earlier_stops,
         "training": [{"week": w, "summary": weekly.get(w)} for w in reported],
-        "excluded": excluded,
     }
