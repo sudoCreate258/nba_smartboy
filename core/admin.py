@@ -7,7 +7,15 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import Contributor, DailySnapshot, ProbeBaseline, ProbeSession, Supersession, WorkBlock
+from .models import (
+    Contributor,
+    DailySnapshot,
+    DiscomfortCheck,
+    ProbeBaseline,
+    ProbeSession,
+    Supersession,
+    WorkBlock,
+)
 from .services import SKIPPED, SUPERSEDED, record_snapshot
 
 
@@ -120,6 +128,12 @@ class ProbeBaselineAdmin(admin.ModelAdmin):
 class WorkBlockAdmin(CorrectableAdmin):
     list_display = ("start", "end", "task_type", "location", "posture", "planned_length_min", "absorption", "effort", "cid")
     list_filter = ("task_type", "location", "posture", "contributor")
+
+
+@admin.register(DiscomfortCheck)
+class DiscomfortCheckAdmin(CorrectableAdmin):
+    list_display = ("at", "area", "score", "trigger", "countermove", "sharp_or_numb", "cid")
+    list_filter = ("area", "trigger", "countermove", "sharp_or_numb", "contributor")
 
 
 @admin.register(DailySnapshot)
