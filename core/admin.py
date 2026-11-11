@@ -1,6 +1,7 @@
 from urllib.parse import urlencode
 
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
@@ -67,6 +68,26 @@ class CorrectableAdmin(ImmutableAdmin):
                 if parsed is not None and timezone.is_aware(parsed):
                     initial[field.name] = timezone.localtime(parsed)
         return initial
+
+    def get_form(self, request, obj=None, **kwargs):
+        form_class = super().get_form(request, obj, **kwargs)
+        source_cid = request.GET.get("supersedes")
+        model = self.model
+
+        class CorrectionForm(form_class):
+            def clean(self):
+                cleaned = super().clean()
+                if source_cid is None:
+                    return cleaned
+                old = model.objects.filter(cid=source_cid).first()
+                if old is None:
+                    raise ValidationError("The record to correct (supersedes) does not exist.")
+                contributor = cleaned.get("contributor")
+                if contributor is not None and contributor.pk != old.contributor_id:
+                    raise ValidationError("A correction must have the same contributor as the record it supersedes.")
+                return cleaned
+
+        return CorrectionForm
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
