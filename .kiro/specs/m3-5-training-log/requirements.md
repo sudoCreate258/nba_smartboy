@@ -25,7 +25,14 @@ durability, so joint pain is captured per set.
 ### R3 CSV import adapter
 - `python manage.py ingest_training_csv <path> [--contributor mike]`:
   one row per set with session columns repeated; sessions grouped by
-  started_at; atomic per file; unknown columns rejected; idempotent by CID.
+  started_at (+ program); atomic per file; unknown columns rejected; idempotent by CID.
+- Header (exact, owner already logs with it):
+  `started_at,program,mesocycle,meso_week,is_deload,location,session_rpe,order,exercise,muscle_group,load_kg,reps,rir,pump,soreness_before,joint_pain,joint_pain_area,notes`
+  - `notes` is the set's notes. Session notes and `ended_at` are optional
+    fields entered in admin; the CSV does not carry them.
+  - `is_deload`: `yes`/`no` or `true`/`false`, case-insensitive.
+  - `started_at`: local time without offset (contributor's time zone) or with
+    an offset; DST-ambiguous or skipped local times are rejected.
 - Document the CSV columns in the README with a sample file in `tests/fixtures/`.
 
 ### R4 Training report
