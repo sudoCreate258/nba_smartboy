@@ -15,6 +15,7 @@ from .models import (
     ProbeSession,
     Reset,
     Supersession,
+    WeeklyCheck,
     WorkBlock,
 )
 from .services import SKIPPED, SUPERSEDED, record_snapshot
@@ -141,6 +142,12 @@ class DiscomfortCheckAdmin(CorrectableAdmin):
 class ResetAdmin(CorrectableAdmin):
     list_display = ("at", "kind", "duration_min", "before_probe_cid", "after_probe_cid", "cid")
     list_filter = ("kind", "contributor")
+
+
+@admin.register(WeeklyCheck)
+class WeeklyCheckAdmin(CorrectableAdmin):
+    list_display = ("week_start", "instrument", "score", "scale_max", "cid")
+    list_filter = ("instrument", "contributor")
 
 
 @admin.register(DailySnapshot)
