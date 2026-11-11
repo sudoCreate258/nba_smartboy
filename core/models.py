@@ -134,6 +134,10 @@ class ProvenancedRecord(models.Model):
     """
 
     record_kind = ""
+    # Fields added after records existed. A null value is left out of the canonical
+    # content, so records created before the field keep their CID. Any future nullable
+    # field must be listed here (see DECISIONS, "Canonicalization of new nullable fields").
+    OMIT_IF_NULL = ()
 
     cid = models.CharField(max_length=128, unique=True, editable=False)
     contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
@@ -157,6 +161,8 @@ class ProvenancedRecord(models.Model):
             value = field.to_python(getattr(self, field.attname))
             if isinstance(value, Decimal):
                 value = quantize_decimal(field, value)
+            if value is None and field.name in self.OMIT_IF_NULL:
+                continue
             out[field.name] = value
         return out
 
