@@ -40,10 +40,16 @@ job) affects sleep, recovery and cognitive acuity.
   instance: 30-second daily check-in, today + trends pages (server-rendered
   SVG), offline queue, opt-in LAN mode, "my data" export (JSON Lines with
   CIDs). Works offline on old phones and a Raspberry Pi; no external requests.
-  Flutter stays possible later via a read-only JSON API.
+  Flutter stays possible later via a read-only JSON API. The UI is modular:
+  each feature (probes, zone, training, later pose, Rendez-Vous) is a module
+  with a manifest declaring what it reads, writes and computes.
+- **M4.5 Encrypted off-hours backup** — client-side encrypted backups (export +
+  database dump) pushed during off-hours, bandwidth-limited, to a remote the
+  user chooses (first target: the owner's Google Drive via rclone). The
+  remote only ever holds ciphertext; restore yields identical CIDs.
 - **M5 Simulated ledger** — usage events, simulated payout ledger keyed by CID,
   reconciliation report. *Closes the Nymbus phase 1 gate.* Must also include:
-  per-category usage permissions the contributor controls (e.g. sleep, body
+  per-module, per-category usage permissions the contributor controls (e.g. sleep, body
   composition, probes, work blocks, media), a periodic "deposit statement"
   (like a pay stub) showing which records/categories generated usage and the
   simulated units earned, and a test that revoking a category stops new usage
