@@ -76,6 +76,33 @@
 - Overlapping WorkBlocks: validation rejects a WorkBlock that overlaps another current WorkBlock of the same contributor (touching end == start is fine). Work-hours sums also merge overlapping intervals as a guard. Tests for both, in M3-T0.
 - Rolling medians with fewer than 3 sessions: keep as is (flags already need 3 scored sessions); add one test that documents it, in M3-T0.
 
+### Owner decisions: alignment with Techno Rave (#0.1) and the Nymbus Program deck (2026-11-11)
+Program map: Nymbus Program Phase 1 "Techno Rave" (liftoff: capture, store, analyze, share) = Nymbus architecture phases 1–3; Program Phase 2 "Tree Hugger" (LLC -> nonprofit, modules and shared data, edu material, homestead DIY); Program Phase 3 "Piggy Bank" (user revenue share, memberships, licensing, shared live feed) = Nymbus phase 4+.
+- **Data domain:** fitness first. "Dropped data" was Techno Rave framing, not a requirement. Fitness data is concrete (wearables, smart devices, later camera-based posture). Phone app-usage capture can return later as an adapter.
+- **Storage:** Google Drive / Google Cloud is not the default. Local PostgreSQL stays. The getting-started guide stays stack-agnostic ("choose your own stack"): adopters may finish setup with their preferred tools and document what they used. The "our data" boundary must not depend on any local stack choice, so a stable interchange contract (record format, CID, encryption) is required before Nymbus phase 2.
+- **CI:** GitHub Actions replaces Travis CI. Close enough to plan.
+- **Client:** phone-friendly web app (installable, works on older phones) in M4; Flutter later; keep both doors open. Hardware targets include repurposed old phones and a Raspberry Pi as a mobile mini edge server.
+- **Resilience principle:** the twin must work fully offline on low-power local hardware (no internet, no cloud dependency). Decentralized, locally maintainable.
+- **Privacy and sharing:** the Nymbus approach (federated learning + differential privacy, client-side encryption before anything leaves the device). Not homomorphic encryption.
+- **Rendez-Vous:** parked until the fitness MVP is set up; then built in parallel. Fitness and Rendez-Vous are the first two marketplace modules.
+- **Camera posture tracking:** future adapter. Use an open-source pose-estimation library with a license compatible with AGPL (to be confirmed per library); video/images never leave the device and are not stored by default, only derived skeleton keypoints.
+- **Renaissance Periodization:** a partnership goal (form, nutrition, plateau tracking), not a code dependency. No public RP API is known.
+- **Revenue model (direction, not built):** free for users who participate in an anonymous docuseries/user-story program; user setup stories market the project; early adopters get a "stake" and rewards (Time Coin; shared-commute-as-a-service idea parked). Anything involving stakes, tokens or rewards stays behind the Nymbus phase 4 legal review. "Anonymous" and "docuseries" need a definition before launch (filmed people are identifiable), and free access tied to participation must not be tied to research consent.
+- **Governance (direction):** a nonprofit runs a worker co-op. The co-op arm generates revenue from members' skills democratically; the nonprofit holds surplus, which members and affected communities debate. Exact structure depends on revenue scale; legal review before filings. Lion13 Software, LLC (NY) will need updated paperwork before receiving funding.
+- **Funding:** NSF PESOSE after there are more users. NSF SBIR Project Pitch and NLnet remain candidates.
+
+### Owner decisions: anonymity, consent and legal timing (2026-11-11)
+- **Development is not slowed by legal work.** Legal steps are checkpoints tied to milestones, not prerequisites for coding.
+- **Participant identity:** participants are referred to only by codes (study/trial #NNN, region #XXX). Codes are pseudonymous, not anonymous, so: no names, faces, voices or exact dates in any public material; public numbers are aggregates with at least 10 people per reported group (smaller groups are merged or suppressed).
+- **Marketing media:** commercials and the docuseries use hired actors or animation (e.g. claymation) dramatizing aggregated before/after experiences. Every piece states it is a dramatization with actors and that results vary; no actor is presented as a real participant.
+- **Consent:** framed as ethical AI use, in plain language: per-category, opt-in, revocable at any time (M5 permissions), shown before any data leaves the device, and never a condition of free access. A research use by an institution adds that institution's own consent and ethics review.
+- **Wording:** call it a "pilot" or "user study" publicly until an institutional partner with an ethics board (IRB) runs it; "clinical trial" is used only then.
+- **Legal checkpoints (owner gates):**
+  1. Before the first user other than Mike stores data on a shared server (Nymbus phase 2): privacy notice, consent flow, breach-notification plan.
+  2. Before accepting money beyond small tips (grants, sponsorships, revenue): entity paperwork for Lion13 Software, LLC; tips reported as income.
+  3. Before any "clinical trial" use: institutional partner + IRB.
+  4. Before stakes, tokens or rewards with monetary value: Nymbus phase 4 legal review.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
