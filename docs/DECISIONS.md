@@ -15,6 +15,11 @@
 - Builder (M1-T6): reverting to values whose CID already exists (A -> B -> A) is skipped as a duplicate (R7), so B stays current. If a revert should be allowed, the CID would need to include `supersedes` or a revision marker.
 - Builder (M1-T6): numeric types chosen (not in spec): hrv, sleep_score, resting_hr_sleep, bmr_kcal as integers; spo2, weight_kg, body_fat_pct, skeletal_muscle_kg as Decimal with 1 decimal place (values are quantized before hashing so 97.8 and 97.80 share a CID). bedtime/wake_time are TimeField (no date).
 - Builder (M1-T4): timezone-aware datetimes are converted to UTC before hashing; naive datetimes and dates are hashed as written.
+- Builder (M1-fix): range bounds not in spec, chosen: sleep_score, spo2, body_fat_pct, accuracy_pct 0-100; sleep_duration_min <= 1440; late_blunders and fast_blunders <= blunders. Confirm or adjust.
+- Builder (M1-fix): one-current-snapshot-per-date is enforced by locking the contributor row in ecord_snapshot, not by a DB constraint (a constraint needs a denormalized "is current" column). Direct DailySnapshot.save() still bypasses the rule. Revisit if concurrent writers appear.
+- Builder (M1-fix): immutability is enforced in save(), delete() and the queryset (update, ulk_update, delete). Raw SQL, ulk_create of new rows and _raw_delete are not blocked; a DB trigger would be needed for that.
+- Builder (M1-fix): settings now fail closed. DJANGO_DEBUG defaults to off, DJANGO_SECRET_KEY is required unless debug, no DB password fallback, compose requires .env and publishes 8000 on 127.0.0.1 only. An existing dev DB volume keeps the password it was created with, so the local .env must match it.
+- Builder (M1-fix): ProbeSession and WorkBlock still have no admin correction flow (supersede path); not in the M1 spec, deferred.
 - License: Apache-2.0 vs AGPL-3.0 (owner). Planner recommends AGPL-3.0 for the app.
 - CID codec: M1 uses raw (0x55) over canonical JSON. AT Protocol uses dag-cbor (0x71). Switch before phase 2 if Nymbus needs CIDs that interoperate with AT Protocol tooling.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.

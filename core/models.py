@@ -25,6 +25,15 @@ class RecordQuerySet(models.QuerySet):
         """Records that no other record supersedes."""
         return self.filter(successors__isnull=True)
 
+    def update(self, **kwargs):
+        raise ImmutableRecordError("Records are immutable; create a superseding record.")
+
+    def bulk_update(self, *args, **kwargs):
+        raise ImmutableRecordError("Records are immutable; create a superseding record.")
+
+    def delete(self):
+        raise ImmutableRecordError("Records are immutable and cannot be deleted.")
+
 
 class ProvenancedRecord(models.Model):
     """Abstract base: immutable record keyed by a CID over its canonical content.
@@ -71,14 +80,41 @@ class ProvenancedRecord(models.Model):
             canonical_bytes(self.record_kind, self.contributor.handle, self.domain_fields())
         )
 
+    def clean(self):
+        if self.supersedes_id and self.supersedes.contributor_id != self.contributor_id:
+            raise ValidationError("A record can only supersede one from the same contributor.")
+
+    def validate(self):
+        """Field and model validation; cid and supersedes are set by the service layer."""
+        # Trailing zeros are not extra precision: Decimal("97.80") is 97.8.
+        for field in self._meta.concrete_fields:
+            if isinstance(field, models.DecimalField):
+                try:
+                    value = field.to_python(getattr(self, field.attname))
+                except ValidationError:
+                    continue  # reported by full_clean below
+                if isinstance(value, Decimal) and value.is_finite():
+                    places = Decimal(1).scaleb(-field.decimal_places)
+                    if value == value.quantize(places):
+                        value = value.quantize(places)
+                    setattr(self, field.attname, value)
+        self.full_clean(exclude=["cid", "supersedes"], validate_unique=False)
+
     def save(self, *args, **kwargs):
         if not self._state.adding:
             raise ImmutableRecordError(
                 f"{type(self).__name__} {self.cid} is immutable; "
                 "create a new record that supersedes it"
             )
+        self.validate()
         self.cid = self.compute_cid()
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ImmutableRecordError(f"{type(self).__name__} {self.cid} cannot be deleted.")
+
+
+PCT = [MinValueValidator(0), MaxValueValidator(100)]
 
 
 class DailySnapshot(ProvenancedRecord):
@@ -98,15 +134,21 @@ class DailySnapshot(ProvenancedRecord):
     BODY_COMPOSITION_FIELDS = ("body_fat_pct", "skeletal_muscle_kg", "bmr_kcal")
 
     date = models.DateField()
-    sleep_score = models.PositiveSmallIntegerField(null=True, blank=True)
+    sleep_score = models.PositiveSmallIntegerField(null=True, blank=True, validators=PCT)
     bedtime = models.TimeField(null=True, blank=True)
     wake_time = models.TimeField(null=True, blank=True)
-    sleep_duration_min = models.PositiveSmallIntegerField(null=True, blank=True)
+    sleep_duration_min = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(1440)]
+    )
     resting_hr_sleep = models.PositiveSmallIntegerField(null=True, blank=True)
     hrv = models.PositiveSmallIntegerField(null=True, blank=True)
-    spo2 = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    spo2 = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True, validators=PCT
+    )
     weight_kg = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
-    body_fat_pct = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    body_fat_pct = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True, validators=PCT
+    )
     skeletal_muscle_kg = models.DecimalField(
         max_digits=5, decimal_places=1, null=True, blank=True
     )
@@ -124,6 +166,9 @@ class DailySnapshot(ProvenancedRecord):
         return f"{self.date} {self.source} {self.cid[:12]}"
 
     def clean(self):
+        super().clean()
+        if self.supersedes_id and self.supersedes.date != self.date:
+            raise ValidationError("A correction must have the same date as the snapshot it supersedes.")
         if self.bia_timing == self.BiaTiming.POST_SAUNA:
             set_fields = [
                 f for f in self.BODY_COMPOSITION_FIELDS if getattr(self, f) is not None
@@ -133,11 +178,6 @@ class DailySnapshot(ProvenancedRecord):
                     "Post-sauna BIA readings are invalid; body composition must be "
                     f"empty (set: {', '.join(set_fields)})."
                 )
-
-    def save(self, *args, **kwargs):
-        if self._state.adding:
-            self.clean()
-        super().save(*args, **kwargs)
 
 
 class ProbeSession(ProvenancedRecord):
@@ -157,7 +197,9 @@ class ProbeSession(ProvenancedRecord):
     kind = models.CharField(max_length=16, choices=Kind.choices)
     time_control = models.CharField(max_length=32, null=True, blank=True)
     n_items = models.PositiveSmallIntegerField(null=True, blank=True)
-    accuracy_pct = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    accuracy_pct = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True, validators=PCT
+    )
     median_solve_s = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
     blunders = models.PositiveSmallIntegerField(null=True, blank=True)
     late_blunders = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -169,6 +211,14 @@ class ProbeSession(ProvenancedRecord):
 
     class Meta:
         ordering = ["-started_at"]
+
+    def clean(self):
+        super().clean()
+        if self.blunders is not None:
+            for name in ("late_blunders", "fast_blunders"):
+                value = getattr(self, name)
+                if value is not None and value > self.blunders:
+                    raise ValidationError(f"{name} cannot exceed blunders.")
 
     def __str__(self):
         return f"{self.kind} {self.started_at:%Y-%m-%d %H:%M} {self.cid[:12]}"
@@ -225,14 +275,10 @@ class WorkBlock(ProvenancedRecord):
         return self.end - self.start
 
     def clean(self):
+        super().clean()
         if self.start and self.end and self.end <= self.start:
             raise ValidationError("end must be after start.")
         for name in ("absorption", "effort"):
             value = getattr(self, name)
             if value is not None and not 1 <= value <= 5:
                 raise ValidationError(f"{name} must be between 1 and 5.")
-
-    def save(self, *args, **kwargs):
-        if self._state.adding:
-            self.clean()
-        super().save(*args, **kwargs)

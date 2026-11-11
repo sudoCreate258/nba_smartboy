@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.urls import reverse
 
-from core.models import Contributor, ImmutableRecordError, ProbeSession, WorkBlock
+from core.models import Contributor, ImmutableRecordError, ProbeSession, ProvenancedRecord, WorkBlock
 
 T0 = datetime.datetime(2026, 11, 11, 9, 0, tzinfo=datetime.timezone.utc)
 
@@ -61,7 +61,7 @@ def test_work_block_db_constraint_end_after_start(mike):
     b = block(mike, end=T0 - datetime.timedelta(minutes=1))
     with pytest.raises(IntegrityError), transaction.atomic():
         b.cid = b.compute_cid()
-        super(WorkBlock, b).save()
+        super(ProvenancedRecord, b).save()  # skip model validation
 
 
 @pytest.mark.parametrize("field", ["absorption", "effort"])

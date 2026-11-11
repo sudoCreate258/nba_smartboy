@@ -1,6 +1,6 @@
 from django.db import transaction
 
-from .models import DailySnapshot
+from .models import Contributor, DailySnapshot
 
 CREATED = "created"
 SKIPPED = "skipped"
@@ -15,7 +15,10 @@ def record_snapshot(snapshot):
     Returns (record, outcome).
     """
     with transaction.atomic():
-        snapshot.clean()
+        snapshot.validate()
+        # Serialize writers per contributor so two callers cannot both supersede
+        # the same current snapshot.
+        Contributor.objects.select_for_update().get(pk=snapshot.contributor_id)
         cid = snapshot.compute_cid()
         existing = DailySnapshot.objects.filter(cid=cid).first()
         if existing is not None:
