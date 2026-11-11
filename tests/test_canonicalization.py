@@ -1,6 +1,9 @@
 import datetime
+from decimal import Decimal
 
 import pytest
+from django.core.exceptions import ValidationError
+from django.urls import reverse
 
 from core.models import Contributor, ProbeSession
 
@@ -42,3 +45,30 @@ def test_null_omit_if_null_field_is_left_out(mike, monkeypatch):
     assert "own_rating" not in fields  # null and listed, so omitted
     assert "opponent_rating" in fields and fields["opponent_rating"] is None  # null, not listed: kept
 
+
+
+def test_move_time_cv_is_in_cid_only_when_set(mike):
+    base = rapid(mike)
+    with_cv = rapid(mike, move_time_cv="0.45")
+    assert "move_time_cv" not in base.domain_fields()
+    assert with_cv.domain_fields()["move_time_cv"] == Decimal("0.45")
+    assert with_cv.compute_cid() != base.compute_cid()
+    assert rapid(mike, move_time_cv=0.45).compute_cid() == with_cv.compute_cid()
+
+
+def test_move_time_cv_saves_and_rejects_bad_values(mike):
+    p = rapid(mike, move_time_cv="0.45")
+    p.save()
+    p.refresh_from_db()
+    assert p.move_time_cv == Decimal("0.45")
+    for bad in ("-0.01", "0.456", "nan"):
+        with pytest.raises(ValidationError):
+            rapid(mike, move_time_cv=bad, notes=bad).save()
+
+
+def test_admin_adds_probe_with_move_time_cv(admin_client, mike):
+    post = {"contributor": mike.pk, "started_at_0": "2026-11-11", "started_at_1": "09:00:00",
+            "kind": "rapid_game", "move_time_cv": "0.62", "notes": ""}
+    assert admin_client.post(reverse("admin:core_probesession_add"), post).status_code == 302
+    assert ProbeSession.objects.get().move_time_cv == Decimal("0.62")
+    assert admin_client.get(reverse("admin:core_probesession_changelist")).status_code == 200
