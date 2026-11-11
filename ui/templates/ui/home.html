@@ -1,0 +1,36 @@
+{% extends "ui/base.html" %}
+{% block title %}Today - Twin{% endblock %}
+{% block content %}
+{% if t.stop_signals %}
+<section class="stop" role="alert" aria-labelledby="stop-h">
+  <h2 id="stop-h">Stop signals</h2>
+  <ul>
+    {% for s in t.stop_signals %}<li>{{ s.at|date:"D H:i" }}: {{ s.what }}. {{ stop_text|capfirst }}.</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% if t.earlier_stop_signals %}<p class="note">Earlier stop signals before this week: {{ t.earlier_stop_signals }}.</p>{% endif %}
+
+<h1>Today, {{ t.day|date:"D j M" }}</h1>
+
+<section aria-labelledby="checkins-h">
+  <h2 id="checkins-h">Check-ins</h2>
+  <ul class="checks">
+    {% for label, done in t.checkins %}
+    <li class="{% if done %}done{% else %}missing{% endif %}"><span class="mark" aria-hidden="true">{% if done %}&#10003;{% else %}&#9675;{% endif %}</span> {{ label }}: {% if done %}done{% else %}missing{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section aria-labelledby="flags-h">
+  <h2 id="flags-h">Flags</h2>
+  <dl class="flags">
+    {% for p in t.probes %}
+    <dt>Probe: {{ p.kind }}</dt>
+    <dd><span class="flag flag-{{ p.flag }}">{{ p.flag }}</span>{% if p.reasons %} <span class="why">{{ p.reasons|join:"; " }}</span>{% endif %}</dd>
+    {% endfor %}
+    <dt>Zone (this week)</dt>
+    <dd><span class="flag flag-{{ t.zone.flag|slugify }}">{{ t.zone.flag }}</span> <span class="why">{{ t.zone.detail }}</span></dd>
+  </dl>
+</section>
+{% endblock %}

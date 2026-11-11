@@ -1,0 +1,25 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Twin{% endblock %}</title>
+<link rel="stylesheet" href="{% static 'ui/app.css' %}">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="bar">
+  <span class="brand">Twin</span>
+  {% if user.is_authenticated %}
+  <nav aria-label="Main">
+    <a href="{% url 'ui:home' %}"{% if request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>Today</a>
+    <form method="post" action="{% url 'ui:logout' %}" class="inline">{% csrf_token %}<button type="submit" class="link">Log out</button></form>
+  </nav>
+  {% endif %}
+</header>
+<main id="main">
+{% block content %}{% endblock %}
+</main>
+<footer><p>{{ disclaimer|default:"Load gauge, not a medical assessment." }}</p></footer>
+</body>
+</html>

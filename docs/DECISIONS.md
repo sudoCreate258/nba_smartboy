@@ -175,6 +175,12 @@ Two-model review: 10 issues (3 High, 5 Medium, 2 Low); report in `.agents/review
 - **Local folder stays `nba_smartboy`** for now: the owner's permissions file, the steering files (`.kiro/steering/product.md`, `tech.md`) and the planner's checks use that path, and Docker Compose derives the database volume name `nba_smartboy_pgdata` from it. Renaming the folder later needs those updated together (and the volume carried over).
 - New commits use the noreply address (passed per command; the builder does not change git config).
 
+### M4 builder choices (builder, 2026-11-11, in progress)
+Choices the spec left open. Owner or planner may overrule.
+- **App name:** `ui` (the design allows `app` or `ui`; `ui` avoids confusion with Django "apps").
+- **Which contributor a login sees:** Nymbus phase 1 has one contributor per instance, so every login maps to `TWIN_CONTRIBUTOR` (env, default `mike`). Linking Django users to contributors is Nymbus phase 2.
+- **Home screen stop signals:** sharp_or_numb discomfort checks and training sets with joint pain >= 2 in the current local week, plus a count of earlier ones.
+
 ### Planner answers to M3 (2026-11-11)
 - M3 builder choices accepted.
 - Demographic pricing (owner clarification): its purpose is to put a tangible value on data from different groups to see where costs can be cut or optimized. It runs only on aggregates (at least 10 people per group), never on individual-level demographic records.

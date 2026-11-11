@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "core",
+    "ui",
 ]
 
 MIDDLEWARE = [
@@ -82,4 +83,13 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+# Phone app (M4): one contributor per instance in Nymbus phase 1; every login sees this one.
+TWIN_CONTRIBUTOR = os.environ.get("TWIN_CONTRIBUTOR", "mike")
+LOGIN_URL = "ui:login"
+LOGIN_REDIRECT_URL = "ui:home"
+LOGOUT_REDIRECT_URL = "ui:login"
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
