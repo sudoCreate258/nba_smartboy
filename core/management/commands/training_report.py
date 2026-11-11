@@ -5,9 +5,8 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from core.models import Contributor
+from core.services.common import DISCLAIMER, STOP_TEXT, iso_default
 from core.services.training_report import training_report
-
-from .zone_report import DISCLAIMER, STOP_TEXT, _iso
 
 
 def jsonable(report, contributor):
@@ -27,7 +26,6 @@ def jsonable(report, contributor):
         "stop_signals": [stop(s) for s in report["stop_signals"]],
         "earlier_stop_signals": report["earlier_stop_signals"],
         "training": [{"week": t["week"].isoformat(), "summary": summary(t["summary"])} for t in report["training"]],
-        "excluded": report["excluded"],
         "disclaimer": DISCLAIMER,
     }
 
@@ -60,8 +58,6 @@ def render_text(item):
                      f"tonnage {w['tonnage_kg']:.0f} kg, mean RIR {rir}")
         lines.append(f"  hard sets: {hard}")
         lines.append(f"  joint-pain sets by area: {pain}")
-    for problem in item["excluded"]:
-        lines.append(f"Excluded: {problem}")
     lines.append("")
     lines.append(DISCLAIMER)
     return "\n".join(lines)
@@ -87,6 +83,6 @@ class Command(BaseCommand):
             raise CommandError(f"Unknown contributor: {contributor}")
         item = jsonable(training_report(who, weeks=weeks, until=until), who)
         if as_json:
-            self.stdout.write(json.dumps(item, indent=2, default=_iso))
+            self.stdout.write(json.dumps(item, indent=2, default=iso_default))
         else:
             self.stdout.write(render_text(item))

@@ -72,7 +72,17 @@ def test_sets_follow_a_corrected_session(mike):
     Supersession.record(old, fixed)
     data = json.loads(report("--json", "--weeks", "1"))
     week = data["training"][0]["summary"]
-    assert week["sets"] == 7 and week["deload"] is True and data["excluded"] == []
+    assert week["sets"] == 7 and week["sessions"] == 2 and week["deload"] is True
+
+
+def test_sessions_without_sets_count_and_mark_deload(mike):
+    """Review #4: a session logged without sets still counts, and a zero-set deload marks its week."""
+    TrainingSession(contributor=mike, started_at=datetime.datetime(2026, 11, 17, 23, tzinfo=datetime.timezone.utc),
+                    program="RP", is_deload=True).save()
+    TrainingSession(contributor=mike, started_at=datetime.datetime(2026, 11, 18, 23, tzinfo=datetime.timezone.utc),
+                    program="RP").save()
+    out = report("--until", "2026-11-18", "--weeks", "1")
+    assert "2026-11-16 DELOAD: 2 sessions, 0 sets, tonnage 0 kg, mean RIR n/a" in out
 
 
 def test_earlier_stop_signals_counted(mike):

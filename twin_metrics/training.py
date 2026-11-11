@@ -32,20 +32,29 @@ def stop_signals(sets):
     return sorted((s for s in sets if is_stop_signal(s)), key=lambda s: (s["started_at"], s.get("order", 0)))
 
 
-def weekly_training(sets, tz):
-    """{week Monday: summary} for weeks with sets, oldest first.
+def weekly_training(sets, tz, sessions=None):
+    """{week Monday: summary} for weeks with sets or sessions, oldest first.
 
-    summary: sessions (distinct session_cid), sets, hard_sets_by_muscle,
-    tonnage_kg, mean_rir (None when no set recorded rir), rir_n, deload (any
-    session that week is a deload), joint_pain_by_area (sets with joint_pain
-    >= 1; area "unknown" when not given), stop_signals.
+    sessions: optional [{"cid", "started_at", "is_deload"}]; when given, session
+    counts and deload marks come from them, so a session without sets still counts.
+    Otherwise they are derived from the sets.
+    summary: sessions, sets, hard_sets_by_muscle, tonnage_kg, mean_rir (None
+    when no set recorded rir), rir_n, deload (any session that week is a
+    deload), joint_pain_by_area (sets with joint_pain >= 1; area "unknown" when
+    not given), stop_signals.
     """
-    weeks = {}
+    if sessions is None:
+        sessions = list({s["session_cid"]: {"cid": s["session_cid"], "started_at": s["started_at"],
+                                             "is_deload": s.get("is_deload", False)} for s in sets}.values())
+    weeks, session_weeks = {}, {}
     for s in sets:
         weeks.setdefault(week_of(s["started_at"], tz), []).append(s)
+    for sess in sessions:
+        session_weeks.setdefault(week_of(sess["started_at"], tz), []).append(sess)
     out = {}
-    for week in sorted(weeks):
-        items = weeks[week]
+    for week in sorted(set(weeks) | set(session_weeks)):
+        items = weeks.get(week, [])
+        week_sessions = session_weeks.get(week, [])
         hard = {}
         for s in items:
             if is_hard(s):
@@ -57,13 +66,13 @@ def weekly_training(sets, tz):
                 area = s.get("joint_pain_area") or UNKNOWN
                 pain[area] = pain.get(area, 0) + 1
         out[week] = {
-            "sessions": len({s.get("session_cid") for s in items}),
+            "sessions": len(week_sessions),
             "sets": len(items),
             "hard_sets_by_muscle": dict(sorted(hard.items())),
             "tonnage_kg": sum(tonnage(s) for s in items),
             "mean_rir": statistics.fmean(rirs) if rirs else None,
             "rir_n": len(rirs),
-            "deload": any(s.get("is_deload") for s in items),
+            "deload": any(s.get("is_deload") for s in week_sessions),
             "joint_pain_by_area": dict(sorted(pain.items())),
             "stop_signals": stop_signals(items),
         }

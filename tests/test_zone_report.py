@@ -160,10 +160,10 @@ def test_correction_that_breaks_the_reset_contract_excludes_it(mike, change):
 
 def test_unresolvable_probe_is_excluded_not_counted(mike, monkeypatch):
     """Review #6: a broken correction chain drops the reset from n and says so."""
-    from core.services import zone_report as svc
+    from core import models
 
     add_reset(mike, 0, 0, "walk", 70, 80)
-    monkeypatch.setattr(svc, "MAX_CHAIN", 0)
+    monkeypatch.setattr(models, "MAX_CHAIN", 0)
     r = zone_report(mike, weeks=4, until=UNTIL)
     assert r["resets"] == {} and "no longer resolves" in r["resets_excluded"][0]
 
