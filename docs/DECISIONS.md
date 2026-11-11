@@ -103,6 +103,24 @@ Program map: Nymbus Program Phase 1 "Techno Rave" (liftoff: capture, store, anal
   3. Before any "clinical trial" use: institutional partner + IRB.
   4. Before stakes, tokens or rewards with monetary value: Nymbus phase 4 legal review.
 
+### Owner direction: "our data" transition and the Coding Village institution (2026-11-11)
+- Source: "Coding Days" deck (SUNY Orange Computer and Technology Department, dev group). The institution that runs "our data" is a Coding Village: ranks Genin -> Chunin -> Jounin/ANBU -> Kage (Hokage); Power Groups (Communication, Source Code, Hardware, and mixed Purple/Orange/Green).
+- **The twin is the entry project.** Path to Genin requires implementing a self-tracking open-source project; Chunin registration includes a proxy to the participant's self-tracking software, tested yearly against software updates. So the getting-started guide doubles as the Genin curriculum, and "choose your own stack" setups are part of the evaluation.
+- **Hokage runs a local OurData server** and must exchange and host backups with at least two other Hokage. This defines the transition step.
+- **P1.5 "OurData backup" (between Nymbus phase 1 and 2):**
+  - A member's instance encrypts its "my data" export (M4) on the device and sends it to their village's OurData server.
+  - The OurData server stores ciphertext only and cannot read it; it replicates the ciphertext to at least two peer OurData servers.
+  - Restore works on a fresh instance with the member's key; CIDs are identical after restore.
+  - No analysis, sharing or payout on the server in P1.5 (that is Nymbus phase 2+).
+  - Prerequisites: M4 export format, M6 HTTPS and signed images. Legal checkpoint 1 applies (privacy notice, consent, breach plan), because other people's data, even encrypted, sits on a shared server.
+- **Fit with existing milestones:** Coding Days scenario 4 (ergonomic, skeletal and visual strain from heavy computer use) is what M3 measures.
+- **Points that need owner decisions before Nymbus phase 2 (recorded, not decided):**
+  1. The deck's base-rate model sells and loans anonymized usage data, demographic information and testimonials to third parties, priced by user demographic. This conflicts with the per-category, revocable consent decided earlier and with avoiding demographic data. Selling health data also triggers stricter privacy laws.
+  2. "Attention stock market" falls under the Nymbus phase 4 legal review.
+  3. Rank-based approval (Kage approves contracts) vs the worker co-op's democratic model: define which decisions are democratic and which are delegated.
+  4. Health insurance for Chunin implies an employer: decide which entity employs members.
+  5. "Kickback" to host governments: call it a revenue share with host communities and define it in the governance documents.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
