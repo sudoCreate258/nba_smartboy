@@ -62,15 +62,35 @@ def _share(focus_min, total_min):
     return focus_min / total_min if total_min else None
 
 
+def union_minutes(blocks):
+    """Minutes covered by the blocks; overlapping time is counted once.
+
+    New overlapping blocks are rejected at save time, but rows stored before that
+    rule may overlap, so every sum goes through the union.
+    """
+    total, cur_start, cur_end = 0.0, None, None
+    for b in sorted(blocks, key=lambda b: b["start"]):
+        if cur_end is not None and b["start"] <= cur_end:
+            cur_end = max(cur_end, b["end"])
+            continue
+        if cur_end is not None:
+            total += (cur_end - cur_start).total_seconds() / 60
+        cur_start, cur_end = b["start"], b["end"]
+    if cur_end is not None:
+        total += (cur_end - cur_start).total_seconds() / 60
+    return total
+
+
 def _summary(blocks):
-    total = sum(minutes(b) for b in blocks)
-    focus = [minutes(b) for b in blocks if is_high_focus(b)]
+    focus_blocks = [b for b in blocks if is_high_focus(b)]
+    total = union_minutes(blocks)
+    focus = union_minutes(focus_blocks)
     return {
         "blocks": len(blocks),
         "total_hours": total / 60,
-        "high_focus_minutes": sum(focus),
-        "focus_share": _share(sum(focus), total),
-        "theta": theta(focus),
+        "high_focus_minutes": focus,
+        "focus_share": _share(focus, total),
+        "theta": theta([minutes(b) for b in focus_blocks]),
     }
 
 
@@ -119,6 +139,8 @@ def zone_amber(weeks, week):
     have = [weeks[w] for w in prior if w in weeks]
     if len(have) < PRIOR_WEEKS:
         return {"state": None, "detail": f"insufficient data: {len(have)} of {PRIOR_WEEKS} prior weeks have work blocks"}
+    if current["focus_share"] is None or any(w["focus_share"] is None for w in have):
+        return {"state": None, "detail": "insufficient data: a week has no recorded minutes"}
     mean_share = statistics.fmean(w["focus_share"] for w in have)
     mean_hours = statistics.fmean(w["total_hours"] for w in have)
     share, hours = current["focus_share"], current["total_hours"]
@@ -138,12 +160,14 @@ def _delta(reset, metric):
 
 
 def reset_effect(resets):
-    """Per reset kind: n and mean change (after - before) per mini-probe metric, vs "none".
+    """Per reset kind and mini-probe metric: n usable pairs, mean change (after - before), vs "none".
 
     resets: [{"kind", "before": {metric: value}, "after": {metric: value}}].
-    Returns {kind: {"n", "interpretable", metric: {"n", "mean_change", "vs_none"}}};
-    kinds with n < MIN_RESET_N are kept but interpretable is False. vs_none is
-    the kind's mean change minus the mean change of "none" (None when either is missing).
+    Returns {kind: {"resets", metric: {"n", "mean_change", "interpretable", "vs_none",
+    "vs_none_interpretable"}}}. "n" counts the resets where both probes recorded
+    that metric, so a metric left empty never inflates the sample. A metric is
+    interpretable with n >= MIN_RESET_N; vs_none (the kind's mean change minus
+    the mean change of "none") is only interpretable when both sides are.
     A higher accuracy change is better; a lower solve-time change is better.
     """
     by_kind = {}
@@ -151,17 +175,25 @@ def reset_effect(resets):
         by_kind.setdefault(r["kind"], []).append(r)
     out = {}
     for kind, items in sorted(by_kind.items()):
-        row = {"n": len(items), "interpretable": len(items) >= MIN_RESET_N}
+        row = {"resets": len(items)}
         for metric in RESET_METRICS:
             deltas = [d for d in (_delta(r, metric) for r in items) if d is not None]
-            row[metric] = {"n": len(deltas), "mean_change": statistics.fmean(deltas) if deltas else None}
+            row[metric] = {
+                "n": len(deltas),
+                "mean_change": statistics.fmean(deltas) if deltas else None,
+                "interpretable": len(deltas) >= MIN_RESET_N,
+            }
         out[kind] = row
     control = out.get("none")
     for kind, row in out.items():
         for metric in RESET_METRICS:
-            mine = row[metric]["mean_change"]
-            base = control[metric]["mean_change"] if control else None
-            row[metric]["vs_none"] = None if kind == "none" or mine is None or base is None else mine - base
+            mine = row[metric]
+            base = control[metric] if control else None
+            if kind == "none" or base is None or mine["mean_change"] is None or base["mean_change"] is None:
+                mine["vs_none"], mine["vs_none_interpretable"] = None, False
+            else:
+                mine["vs_none"] = mine["mean_change"] - base["mean_change"]
+                mine["vs_none_interpretable"] = mine["interpretable"] and base["interpretable"]
     return out
 
 

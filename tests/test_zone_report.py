@@ -122,20 +122,99 @@ def test_reset_effect_in_report(mike):
         add_reset(mike, 1, i, "none", 70, 72)
     add_reset(mike, 2, 0, "nap", 70, 90)
     out = report()
-    assert "walk: n=5, accuracy change +10.0, solve change +0.0 s; vs none: accuracy +8.0, solve +0.0 s" in out
-    assert "nap: n=1" in out and "(not interpretable yet: n < 5)" in out
+    assert "walk: 5 resets; accuracy change +10.0 (n=5), vs none +8.0; solve change +0.0 s (n=5), vs none +0.0 s" in out
+    assert "nap: 1 resets; accuracy change +20.0 (n=1, not interpretable yet: n < 5), vs none +18.0 " \
+           "(underpowered: needs n >= 5 on both sides)" in out
     data = json.loads(report("--json"))
-    assert data["resets"]["walk"]["accuracy_pct"]["vs_none"] == pytest.approx(8)
-    assert data["resets"]["walk"]["interpretable"] is True
+    walk = data["resets"]["walk"]["accuracy_pct"]
+    assert walk["vs_none"] == pytest.approx(8) and walk["interpretable"] and walk["vs_none_interpretable"]
 
 
 def test_reset_follows_corrections_of_its_probes(mike):
     before, after = add_reset(mike, 0, 0, "walk", 70, 80)
     fixed = mini(mike, after.started_at, 85)
     Supersession.record(after, fixed)
-    assert current_probe(after.cid) == fixed
+    assert current_probe(after.cid, mike) == fixed
     r = zone_report(mike, weeks=4, until=UNTIL)
     assert r["resets"]["walk"]["accuracy_pct"]["mean_change"] == pytest.approx(15)
+    assert r["resets_corrected"] == 1 and r["resets_excluded"] == []
+    assert "1 reset(s) use probes that were corrected" in report()
+
+
+@pytest.mark.parametrize("change", ["kind", "time"])
+def test_correction_that_breaks_the_reset_contract_excludes_it(mike, change):
+    """Review #3: a probe corrected to another kind, or moved past the reset, no longer counts."""
+    before, after = add_reset(mike, 0, 0, "walk", 70, 80)
+    if change == "kind":
+        fixed = ProbeSession(contributor=mike, started_at=after.started_at, kind="puzzle_set", accuracy_pct=80)
+    else:
+        fixed = ProbeSession(contributor=mike, started_at=at(mike, 0, 0, 12), kind="mini_puzzle", accuracy_pct=80)
+    fixed.save()
+    Supersession.record(after, fixed)
+    r = zone_report(mike, weeks=4, until=UNTIL)
+    assert r["resets"] == {}
+    [problem] = r["resets_excluded"]
+    assert ("other than mini_puzzle" if change == "kind" else "no longer bracket") in problem
+    assert "Excluded: reset walk at 2026-10-05 13:00" in report()
+
+
+def test_unresolvable_probe_is_excluded_not_counted(mike, monkeypatch):
+    """Review #6: a broken correction chain drops the reset from n and says so."""
+    from core.services import zone_report as svc
+
+    add_reset(mike, 0, 0, "walk", 70, 80)
+    monkeypatch.setattr(svc, "MAX_CHAIN", 0)
+    r = zone_report(mike, weeks=4, until=UNTIL)
+    assert r["resets"] == {} and "no longer resolves" in r["resets_excluded"][0]
+
+
+def test_correction_chain_is_followed_to_the_end(mike):
+    before, after = add_reset(mike, 0, 0, "walk", 70, 80)
+    first = mini(mike, after.started_at, 82)
+    Supersession.record(after, first)
+    second = mini(mike, after.started_at, 84)
+    Supersession.record(first, second)
+    assert current_probe(after.cid, mike) == second
+
+
+def test_earlier_stop_signals_are_counted(mike):
+    DiscomfortCheck(contributor=mike, at=at(mike, -2, 0, 10), area="wrist", score=7, trigger="other",
+                    sharp_or_numb=True).save()
+    out = report()
+    assert "Stop signals: none" in out
+    assert "Earlier stop signals before these weeks: 1" in out
+    assert json.loads(report("--json"))["earlier_stop_signals"] == 1
+
+
+def test_json_has_no_free_text_notes(mike):
+    DiscomfortCheck(contributor=mike, at=at(mike, 3, 0, 10), area="hip", score=3, trigger="other",
+                    sharp_or_numb=True, notes="private text").save()
+    assert "private text" not in report("--json")
+
+
+def test_report_is_per_contributor(mike):
+    sam = Contributor.objects.create(handle="sam")
+    seed_zone(sam)
+    DiscomfortCheck(contributor=sam, at=at(sam, 3, 0, 10), area="hip", score=9, trigger="other",
+                    sharp_or_numb=True).save()
+    WeeklyCheck(contributor=sam, week_start=MON, instrument="OLBI", score="3", scale_max="4").save()
+    r = zone_report(mike, weeks=4, until=UNTIL)
+    assert all(z["summary"] is None for z in r["zone"])
+    assert r["stop_signals"] == [] and r["weekly_checks"] == []
+
+
+def test_blocks_before_the_lookback_are_not_loaded(mike):
+    seed_zone(mike)
+    r = zone_report(mike, weeks=1, until=UNTIL)  # window = week 3, lookback = weeks 0-2
+    assert r["zone"][0]["amber"]["state"] is False
+    r = zone_report(mike, weeks=1, until=UNTIL - datetime.timedelta(weeks=2))  # week 1: only 1 prior week
+    assert r["zone"][0]["amber"]["state"] is None
+
+
+def test_until_includes_the_whole_week(mike):
+    work(mike, 3, 5, 9, 60)  # Saturday after the Wednesday --until date
+    r = zone_report(mike, weeks=1, until=UNTIL)
+    assert r["zone"][0]["summary"]["total_hours"] == pytest.approx(1.0)
 
 
 def test_weekly_check_shown_separately(mike):

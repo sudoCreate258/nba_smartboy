@@ -131,6 +131,7 @@ def test_admin_rejects_overlapping_block(admin_client, mike):
             "end_0": "2026-11-11", "end_1": "06:00:00", "task_type": "code", "notes": ""}
     resp = admin_client.post(reverse("admin:core_workblock_add"), post)
     assert resp.status_code == 200 and b"Overlaps work block" in resp.content
+    assert b"2026-11-11 04:00-05:00 America/New_York" in resp.content  # local time, not UTC
     assert WorkBlock.objects.count() == 1
 
 

@@ -154,19 +154,69 @@ def test_reset_effect_vs_none_and_n_marking():
     resets = [rs("walk", 70, 80, 12, 10) for _ in range(5)] + [rs("none", 70, 72) for _ in range(5)]
     resets += [rs("nap", 70, 90) for _ in range(4)]
     out = zone.reset_effect(resets)
-    assert out["walk"]["n"] == 5 and out["walk"]["interpretable"] is True
-    assert out["walk"]["accuracy_pct"]["mean_change"] == 10
-    assert out["walk"]["accuracy_pct"]["vs_none"] == 8
+    walk = out["walk"]["accuracy_pct"]
+    assert out["walk"]["resets"] == 5 and walk["n"] == 5 and walk["interpretable"] is True
+    assert walk["mean_change"] == 10 and walk["vs_none"] == 8 and walk["vs_none_interpretable"] is True
     assert out["walk"]["median_solve_s"]["vs_none"] == -2
-    assert out["nap"]["n"] == 4 and out["nap"]["interpretable"] is False  # shown, but marked
+    nap = out["nap"]["accuracy_pct"]
+    assert nap["n"] == 4 and nap["interpretable"] is False  # shown, but marked
+    assert nap["vs_none_interpretable"] is False
     assert out["none"]["accuracy_pct"]["vs_none"] is None
 
 
 def test_reset_effect_missing_metrics_and_no_control():
-    r = rs("walk", None, 80)
-    out = zone.reset_effect([r])
-    assert out["walk"]["accuracy_pct"] == {"n": 0, "mean_change": None, "vs_none": None}
+    out = zone.reset_effect([rs("walk", None, 80)])
+    assert out["walk"]["accuracy_pct"] == {"n": 0, "mean_change": None, "interpretable": False,
+                                           "vs_none": None, "vs_none_interpretable": False}
     assert out["walk"]["median_solve_s"]["vs_none"] is None  # no "none" resets to compare with
+
+
+def test_reset_interpretability_counts_usable_pairs_not_rows():
+    """Review #1: five resets where only one recorded solve time are not 5 measurements of it."""
+    resets = [rs("walk", 70, 80, None, None) for _ in range(4)] + [rs("walk", 70, 80, 10, 13)]
+    out = zone.reset_effect(resets)
+    assert out["walk"]["resets"] == 5
+    assert out["walk"]["accuracy_pct"]["interpretable"] is True
+    solve = out["walk"]["median_solve_s"]
+    assert solve["n"] == 1 and solve["mean_change"] == 3 and solve["interpretable"] is False
+
+
+def test_vs_none_underpowered_when_control_is_thin():
+    """Review #4: a single "none" reset never makes a comparison interpretable."""
+    resets = [rs("walk", 70, 80) for _ in range(5)] + [rs("none", 70, 72)]
+    walk = zone.reset_effect(resets)["walk"]["accuracy_pct"]
+    assert walk["interpretable"] is True and walk["vs_none"] == 8
+    assert walk["vs_none_interpretable"] is False
+
+
+# --- overlaps in stored data (review #2) -----------------------------------
+
+def test_overlapping_blocks_counted_once():
+    a = blk(local(MON, 9), 120)  # 09:00-11:00, high focus
+    b = blk(local(MON, 10), 120, absorption=1)  # 10:00-12:00, not high focus
+    c = blk(local(MON, 9, 30), 30)  # inside a, high focus
+    w = zone.weekly_zone([a, b, c], NY)[MON]
+    assert w["total_hours"] == pytest.approx(3.0)
+    assert w["high_focus_minutes"] == pytest.approx(120)
+    assert w["focus_share"] == pytest.approx(120 / 180)
+    assert zone.union_minutes([]) == 0
+
+
+def test_duplicated_stored_block_is_counted_once():
+    dup = zone.weekly_zone([blk(local(MON, 8), 20 * 60)] * 2, NY)[MON]  # the same 20 h stored twice
+    assert dup["total_hours"] == pytest.approx(20) and dup["focus_share"] == pytest.approx(1.0)
+
+
+def test_zone_amber_false_when_hours_fall():
+    weeks = weeks_with([(0.6, 20), (0.6, 20), (0.6, 20), (0.45, 15)])  # 25% fewer hours
+    assert zone.zone_amber(weeks, MON + datetime.timedelta(weeks=3))["state"] is False
+
+
+def test_zone_amber_week_without_minutes_is_insufficient():
+    weeks = weeks_with([(0.6, 20), (0.6, 20), (0.6, 20), (0.45, 20)])
+    last = MON + datetime.timedelta(weeks=3)
+    weeks[last] = {**weeks[last], "focus_share": None}
+    assert zone.zone_amber(weeks, last)["state"] is None
 
 
 # --- discomfort ------------------------------------------------------------

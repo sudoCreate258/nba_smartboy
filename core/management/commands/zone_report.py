@@ -12,7 +12,9 @@ STOP_TEXT = "stop the block; get it checked by a professional"
 
 
 def _iso(value):
-    return value.isoformat() if isinstance(value, (datetime.date, datetime.datetime)) else value
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.isoformat()
+    raise TypeError(f"Not JSON serializable: {type(value).__name__}")
 
 
 def jsonable(report, contributor):
@@ -24,8 +26,9 @@ def jsonable(report, contributor):
         return {**summary, "stop_signals": [_stop(c) for c in summary["stop_signals"]]} if "stop_signals" in summary else summary
 
     def _stop(c):
+        # Free-text notes are never part of report output (DECISIONS, M3 review).
         return {"at": c["at"].astimezone(tz).isoformat(), "area": c["area"], "score": c["score"],
-                "trigger": c["trigger"], "notes": c["notes"], "cid": c["cid"], "action": STOP_TEXT}
+                "trigger": c["trigger"], "cid": c["cid"], "action": STOP_TEXT}
 
     def by_keys(by):
         return {key: {str(k): v for k, v in groups.items()} for key, groups in by.items()}
@@ -34,6 +37,7 @@ def jsonable(report, contributor):
         "contributor": contributor.handle,
         "weeks": [w.isoformat() for w in report["weeks"]],
         "stop_signals": [_stop(c) for c in report["stop_signals"]],
+        "earlier_stop_signals": report["earlier_stop_signals"],
         "zone": [
             {"week": z["week"].isoformat(),
              "summary": None if z["summary"] is None else {**z["summary"], "by": by_keys(z["summary"]["by"])},
@@ -42,6 +46,8 @@ def jsonable(report, contributor):
         ],
         "discomfort": [{"week": d["week"].isoformat(), "summary": week_summary(d["summary"])} for d in report["discomfort"]],
         "resets": report["resets"],
+        "resets_excluded": report["resets_excluded"],
+        "resets_corrected": report["resets_corrected"],
         "weekly_checks": [
             {"week_start": w.week_start.isoformat(), "instrument": w.instrument, "score": float(w.score),
              "scale_max": float(w.scale_max), "cid": w.cid}
@@ -68,6 +74,9 @@ def render_text(item):
             lines.append(f"  {s['at'][:16].replace('T', ' ')} {s['area']} score {s['score']} ({s['trigger']}): {STOP_TEXT}")
     else:
         lines.append("Stop signals: none")
+    if item["earlier_stop_signals"]:
+        lines.append(f"Earlier stop signals before these weeks: {item['earlier_stop_signals']} "
+                     "(widen --weeks to see them)")
     lines.append("")
     lines.append("== Zone (high focus: absorption >= 4 and interruptions <= 1) ==")
     for z in item["zone"]:
@@ -99,12 +108,21 @@ def render_text(item):
     if not item["resets"]:
         lines.append("no resets logged")
     for kind, r in item["resets"].items():
-        acc, solve = r["accuracy_pct"], r["median_solve_s"]
-        note = "" if r["interpretable"] else " (not interpretable yet: n < 5)"
-        vs = "" if kind == "none" else (f"; vs none: accuracy {_num(acc['vs_none'], '+.1f')}, "
-                                        f"solve {_num(solve['vs_none'], '+.1f')} s")
-        lines.append(f"{kind}: n={r['n']}, accuracy change {_num(acc['mean_change'], '+.1f')}, "
-                     f"solve change {_num(solve['mean_change'], '+.1f')} s{vs}{note}")
+        parts = []
+        for metric, label, unit in (("accuracy_pct", "accuracy", ""), ("median_solve_s", "solve", " s")):
+            m = r[metric]
+            text = f"{label} change {_num(m['mean_change'], '+.1f')}{unit} (n={m['n']}"
+            text += ")" if m["interpretable"] else ", not interpretable yet: n < 5)"
+            if kind != "none" and m["vs_none"] is not None:
+                text += f", vs none {m['vs_none']:+.1f}{unit}"
+                if not m["vs_none_interpretable"]:
+                    text += " (underpowered: needs n >= 5 on both sides)"
+            parts.append(text)
+        lines.append(f"{kind}: {r['resets']} resets; " + "; ".join(parts))
+    if item["resets_corrected"]:
+        lines.append(f"{item['resets_corrected']} reset(s) use probes that were corrected after the reset was saved.")
+    for problem in item["resets_excluded"]:
+        lines.append(f"Excluded: {problem}")
     lines.append("")
     lines.append("== Weekly check (shown as recorded; never combined into one score) ==")
     if not item["weekly_checks"]:
@@ -128,7 +146,8 @@ class Command(BaseCommand):
         parser.add_argument("--contributor", default="mike")
         parser.add_argument("--weeks", type=int, default=4, help="number of local weeks to show (default 4)")
         parser.add_argument("--until", type=datetime.date.fromisoformat, default=None,
-                            help="YYYY-MM-DD: last day of the reported period (default: today)")
+                            help="YYYY-MM-DD: the last reported week is the local week containing this date "
+                                 "(whole week, Monday-Sunday; default: today)")
         parser.add_argument("--json", action="store_true", dest="as_json", help="print JSON instead of text")
 
     def handle(self, *args, contributor, weeks, until, as_json, **options):

@@ -4,7 +4,7 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from core.models import Contributor
-from core.services.probe_report import SCORED_KINDS, kind_report
+from core.services.probe_report import DEFAULT_BASELINE_N, SCORED_KINDS, kind_report
 
 DISCLAIMER = "Load gauge, not a medical assessment."
 
@@ -47,8 +47,8 @@ def _state(condition, true_text, false_text):
 def render_text(item):
     lines = [f"== {item['kind']} =="]
     base = item["baseline"]
-    if item["status"] == "insufficient_baseline" and base["n"] < 10:
-        lines.append(f"Baseline: insufficient baseline ({base['n']} of 10 sessions); no flags raised.")
+    if item["status"] == "insufficient_baseline" and base["n"] < DEFAULT_BASELINE_N:
+        lines.append(f"Baseline: insufficient baseline ({base['n']} of {DEFAULT_BASELINE_N} sessions); no flags raised.")
     elif item["status"] == "insufficient_baseline":
         lines.append(f"Baseline: {'; '.join(item['reasons'])}; no flags raised.")
     else:
