@@ -127,6 +127,17 @@ Program map: Nymbus Program Phase 1 "Techno Rave" (liftoff: capture, store, anal
 - **Health insurance and retirement:** aim to partner directly with physicians and medical professionals so a basic package is a standard minimum for members, not a novelty. Likely easier to pilot in Europe or Canada. Needs legal review per country (legal checkpoint 2).
 - **Tag cleanup:** the mistaken `v0.2.0` tag on `73b5e75` is deleted (owner, 2026-11-11).
 
+### M3 builder choices (builder, 2026-11-11)
+Choices the spec left open. Owner or planner may overrule.
+- **Overlap rule and corrections:** a WorkBlock correction may overlap the block it replaces (the admin passes the source CID through `replaces_cid`, which is not a field and not in the CID). An identical block is a duplicate, not an overlap.
+- **42-day default baseline:** measured from the first to the 10th session's `started_at`; exactly 42 days is accepted. A configured ProbeBaseline has no span limit.
+- **Zone amber prior weeks:** the 3 calendar weeks right before the week. Each must have work blocks; a week without blocks is missing data, not rest, so the result is "insufficient data". Prior mean share 0 never raises amber.
+- **Theta IQR:** inclusive quartiles; one block gives q1 = q3 = median.
+- **Reported weeks:** `zone_report` shows the `--weeks` local weeks ending with the week of `--until` (default: today). Discomfort, stop signals and weekly checks are limited to those weeks; zone amber still looks at earlier weeks; reset effect uses all resets up to the end of the window (more data, n < 5 marking still applies).
+- **Reset references:** validated at save time (current `mini_puzzle` of the same contributor, before < at < after). In the report a referenced probe that was corrected later is followed to its current version.
+- **WeeklyCheck score:** decimal (2 places), because some instruments report a mean rather than a whole-number total; `0 <= score <= scale_max`.
+- **mini_puzzle** is a scored kind in `probe_report` like the others (own baseline, same flag rules); `zone_report` lists every kind's probe flag.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
@@ -135,7 +146,8 @@ Program map: Nymbus Program Phase 1 "Techno Rave" (liftoff: capture, store, anal
 - GitHub remote: `sudoCreate258/nba_smartboy` (private). README badge updated; CI has not run on GitHub yet until the first push.
 
 ## Status
-- M3: spec written (`.kiro/specs/m3-work-zone/`). Not started; starts after the M2 PR is merged.
+- Release v0.2.0 (M1 + M1.1 + M2): owner approved in chat 2026-11-11; PR #5 `develop` -> `main` merged at `b22e433`; CI on `main` green (https://github.com/sudoCreate258/nba_smartboy/actions/runs/43084786354). Tag by the owner.
+- M3: built (T0-T8, spec `.kiro/specs/m3-work-zone/`) on `feature/m3-work-zone`. Verified 2026-11-11: `docker compose exec web pytest` ran 299 passed (M2 was 209); `makemigrations --check --dry-run` reports no changes; pinned pre-M2 ProbeSession and pre-M3 WorkBlock CIDs unchanged. Migrations 0011-0014 are additive only. Shipped: T0 (42-day default baseline, "ratio" label, WorkBlock overlap rule + merged-interval sums, early-median test), WorkBlock `posture`/`planned_length_min` (OMIT_IF_NULL), DiscomfortCheck, `mini_puzzle` kind, Reset, WeeklyCheck, `twin_metrics/zone.py`, `zone_report` (text and `--json`), README section. GitHub Actions run: see the M3 PR.
 - M1: built (T1–T10). T0 decided (AGPL-3.0-or-later). Baseline verified at M1.1 start: `docker compose exec web pytest` ran 76 passed (earlier figures of 59 and 76 were unverified).
 - M2: built (T0-T8, spec `.kiro/specs/m2-probe-log/`). Verified 2026-11-11: `docker compose exec web pytest` ran 209 passed (M1.1 baseline was 138); `makemigrations --check --dry-run` reports no changes. GitHub Actions run: https://github.com/sudoCreate258/nba_smartboy/actions/runs/43067143291.
   - Shipped: T0 housekeeping (admin bad `supersedes` is a form error, DST ambiguous/nonexistent ingest times rejected, SPDX on 0008, `.agents/` ignored); `OMIT_IF_NULL` canonicalization rule with pinned pre-M2 CIDs; `ProbeSession.move_time_cv` (migration 0009); `ProbeBaseline` (migration 0010, no CID); `twin_metrics/probes.py` (plain Python statistics); sleep and work conditions and `kind_report` in `core/services/probe_report.py` (`core/services.py` became the `core/services/` package, imports unchanged); `probe_report` command (text and `--json`); README section.
