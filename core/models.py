@@ -1,9 +1,12 @@
+import datetime
+import zoneinfo
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models import F, OuterRef, Q, Subquery
+from django.utils import timezone
 
 from nymbus.provenance import canonical_bytes, compute_cid
 
@@ -14,8 +17,22 @@ class ImmutableRecordError(Exception):
     """Raised when a saved, CID-keyed record is modified."""
 
 
+def validate_timezone(value):
+    try:
+        zoneinfo.ZoneInfo(value)
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError, OSError):
+        raise ValidationError(f"Unknown time zone: {value!r}")
+
+
 class Contributor(models.Model):
     handle = models.CharField(max_length=64, unique=True)
+    timezone = models.CharField(
+        max_length=64, default="America/New_York", validators=[validate_timezone]
+    )
+
+    @property
+    def tzinfo(self):
+        return zoneinfo.ZoneInfo(self.timezone)
 
     def __str__(self):
         return self.handle
@@ -135,6 +152,13 @@ class ProvenancedRecord(models.Model):
             canonical_bytes(self.record_kind, self.contributor.handle, self.domain_fields())
         )
 
+    def clean(self):
+        for field in self._meta.concrete_fields:
+            if isinstance(field, models.DateTimeField) and field.name != "created_at":
+                value = getattr(self, field.attname)
+                if isinstance(value, datetime.datetime) and timezone.is_naive(value):
+                    raise ValidationError({field.name: "Naive datetimes are not allowed; include a time zone."})
+
     def validate(self):
         """Field and model validation; cid is set on save."""
         # Trailing zeros are not extra precision: Decimal("97.80") is 97.8.
@@ -186,8 +210,8 @@ class DailySnapshot(ProvenancedRecord):
 
     date = models.DateField()
     sleep_score = models.PositiveSmallIntegerField(null=True, blank=True, validators=PCT)
-    bedtime = models.TimeField(null=True, blank=True)
-    wake_time = models.TimeField(null=True, blank=True)
+    bedtime = models.DateTimeField(null=True, blank=True)
+    wake_time = models.DateTimeField(null=True, blank=True)
     sleep_duration_min = models.PositiveSmallIntegerField(
         null=True, blank=True, validators=[MaxValueValidator(1440)]
     )
@@ -249,6 +273,17 @@ class DailySnapshot(ProvenancedRecord):
 
     def clean(self):
         super().clean()
+        if (
+            self.contributor_id
+            and isinstance(self.date, datetime.date)
+            and isinstance(self.wake_time, datetime.datetime)
+            and timezone.is_aware(self.wake_time)
+        ):
+            local_date = self.wake_time.astimezone(self.contributor.tzinfo).date()
+            if self.date != local_date:
+                raise ValidationError(
+                    {"date": f"date must be the wake_time date in {self.contributor.timezone} ({local_date})."}
+                )
         if self.bia_timing == self.BiaTiming.POST_SAUNA:
             set_fields = [
                 f for f in self.BODY_COMPOSITION_FIELDS if getattr(self, f) is not None
