@@ -143,6 +143,11 @@ Choices the spec left open. Owner or planner may overrule.
 - Demographic pricing (owner clarification): its purpose is to put a tangible value on data from different groups to see where costs can be cut or optimized. It runs only on aggregates (at least 10 people per group), never on individual-level demographic records.
 - v0.2.0 = `main` at `b22e433` (PR #5). Tagged by the owner.
 
+### Planner: training log, camera adapter, debug (2026-11-11)
+- M3.5 Training log added before M4 so RP-style training data (sets, reps, load, RIR, pump, soreness, joint pain, mesocycle week/deload) can be logged now. Manual entry and CSV import; no RP API dependency.
+- Camera-based posture/pose tracking (two cameras for 3D) is a later adapter (M7, spec after M4). Rules already decided: video stays on the device and is not stored by default; only derived keypoints become records; library license must be AGPL-compatible.
+- Debug: on for local development only until M4 makes debug-off fully usable.
+
 ## Open
 - CID codec: raw (0x55) over canonical JSON now. AT Protocol uses dag-cbor (0x71). Decide before Nymbus phase 2.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.

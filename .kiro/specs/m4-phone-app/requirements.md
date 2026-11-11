@@ -40,8 +40,7 @@ the home network, on older phones, with no cloud and no app store.
   SameSite=Lax; CSRF on all forms; login rate-limited.
 - HTTPS on the LAN is M6; until then the README warns not to use LAN mode on
   shared or public Wi-Fi.
-- LAN mode refuses to start while `DJANGO_DEBUG` is on; the README says debug
-  is for local development only.
+- Debug off works: static files (admin and app) are served with debug off (WhiteNoise or equivalent, vendored, no CDN); `.env.example` defaults to `DJANGO_DEBUG=0` with instructions to generate a secret key; the README explains `DJANGO_DEBUG=1` is for local development only. LAN mode refuses to start while debug is on.
 
 ### R5 "My data" export
 - `python manage.py export_my_data [--contributor mike] [--out file]` and a
