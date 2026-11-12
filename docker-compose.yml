@@ -21,7 +21,8 @@ services:
     environment:
       POSTGRES_HOST: db
     ports:
-      - "127.0.0.1:8000:8000"
+      # This computer only, unless LAN mode is on (TWIN_LAN_HOST in .env, trusted home network only).
+      - "${TWIN_LAN_HOST:-127.0.0.1}:8000:8000"
     volumes:
       - .:/app
     depends_on:

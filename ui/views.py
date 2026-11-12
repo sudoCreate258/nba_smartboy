@@ -3,7 +3,10 @@ import datetime
 import hashlib
 from pathlib import Path
 
+from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.views import LoginView
+from django.core.cache import cache
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse, JsonResponse
@@ -30,6 +33,41 @@ _NOW_FIELDS = {"probe": "started_at", "discomfort": "at", "reset": "at"}
 
 def _context(contributor, **extra):
     return {"contributor": contributor, "disclaimer": DISCLAIMER, "stop_text": STOP_TEXT, **extra}
+
+
+class RateLimitedLoginView(LoginView):
+    """Django's login view, refusing further attempts after TWIN_LOGIN_MAX_FAILURES failures
+    for one username or one address within TWIN_LOGIN_WINDOW_SECONDS."""
+
+    template_name = "ui/login.html"
+    redirect_authenticated_user = True
+
+    def _keys(self):
+        username = (self.request.POST.get("username") or "").strip().lower()
+        address = self.request.META.get("REMOTE_ADDR", "")
+        return [f"login-fail:user:{username}", f"login-fail:addr:{address}"]
+
+    def _blocked(self):
+        return any((cache.get(k) or 0) >= settings.TWIN_LOGIN_MAX_FAILURES for k in self._keys())
+
+    def post(self, request, *args, **kwargs):
+        if self._blocked():
+            form = self.get_form()
+            form.errors.clear()
+            minutes = settings.TWIN_LOGIN_WINDOW_SECONDS // 60
+            form.add_error(None, f"Too many failed attempts. Wait {minutes} minutes and try again.")
+            return self.render_to_response(self.get_context_data(form=form), status=429)
+        return super().post(request, *args, **kwargs)
+
+    def form_invalid(self, form):
+        for key in self._keys():
+            cache.add(key, 0, settings.TWIN_LOGIN_WINDOW_SECONDS)
+            cache.incr(key)
+        return super().form_invalid(form)
+
+    def form_valid(self, form):
+        cache.delete(self._keys()[0])
+        return super().form_valid(form)
 
 
 @login_required

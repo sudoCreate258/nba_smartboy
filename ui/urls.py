@@ -15,7 +15,6 @@ urlpatterns = [
     path("manifest.webmanifest", views.manifest, name="manifest"),
     path("sw.js", views.service_worker, name="service_worker"),
     path("offline/", views.offline, name="offline"),
-    path("login/", auth_views.LoginView.as_view(template_name="ui/login.html", redirect_authenticated_user=True),
-         name="login"),
+    path("login/", views.RateLimitedLoginView.as_view(), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
 ]

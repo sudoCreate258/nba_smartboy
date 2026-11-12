@@ -3,3 +3,4 @@ psycopg[binary]==3.3.8
 PyYAML==6.0.3
 pytest==9.2.0
 pytest-django==4.14.0
+whitenoise==6.12.0
