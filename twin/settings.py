@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "modules.probes",
     "modules.zone",
     "modules.training",
+    "backup",
 ]
 
 MIDDLEWARE = [
