@@ -14,6 +14,8 @@ from core.services.probe_report import SCORED_KINDS, kind_report
 from core.services.training_report import training_report
 from core.services.zone_report import zone_report
 
+from backup.status import backup_status
+
 from .modules import enabled_ids, is_on
 
 
@@ -87,6 +89,7 @@ def today(contributor, now=None, enabled=None):
             probes.append({"kind": str(kind), "flag": r["level"], "reasons": r["reasons"]})
     return {
         "day": day,
+        "backup": backup_status(now),
         "checkins": [c for c in checkins(contributor, day) if is_on("checkins", c[2], enabled)],
         "stop_signals": sorted(stops, key=lambda s: s["at"]),
         "earlier_stop_signals": earlier,
