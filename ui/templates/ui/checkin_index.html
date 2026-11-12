@@ -1,0 +1,9 @@
+{% extends "ui/base.html" %}
+{% block title %}Check in - Twin{% endblock %}
+{% block content %}
+<h1>Check in</h1>
+<ul class="tiles">
+  {% for kind, item in kinds.items %}<li><a class="tile" href="{% url 'ui:checkin' kind %}">{{ item.0 }}</a></li>{% endfor %}
+</ul>
+<p><a href="{% url 'ui:recent' %}">Recent records and corrections</a></p>
+{% endblock %}

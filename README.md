@@ -124,6 +124,29 @@ Options: `--contributor mike` (default), `--weeks 4` (default), `--until YYYY-MM
 - Per local week (by session start): sessions, sets, hard sets per muscle group (RIR 3 or less, or RIR not recorded), tonnage (load x reps; bodyweight sets add 0), mean RIR and how many sets recorded it, deload weeks marked, and joint-pain sets (joint pain 1 or more) by area.
 - The JSON output never includes free-text notes.
 
+## Phone app
+
+Open http://localhost:8000/ and log in with your Django user. It has these pages:
+- **Today:** stop signals first, then the day's check-ins (done or missing) and the probe and zone flags.
+- **Check in:** quick forms for the daily snapshot, probe, work block, discomfort check and reset.
+- **Trends:** charts for the last 4 or 12 weeks.
+- **Recent:** "Correct this" on any record from the last 14 days. A correction saves a new version; nothing is edited or deleted.
+
+The app works without JavaScript. With it, check-ins you make while the instance is unreachable are kept on the phone and sent when it is reachable again; a check-in sent twice is stored once.
+
+Installing to the home screen and opening viewed pages offline need a service worker, which browsers only allow on `https://` or on `localhost`. So:
+- **On this computer** (`http://localhost:8000/`): install and offline pages work.
+- **On a phone in LAN mode** (plain `http://<address>:8000/`): the offline check-in queue works, but the browser will not install the app or keep pages offline. That arrives with HTTPS in M6.
+
+Logging out deletes the pages saved on the device. Check-ins not yet sent stay on the device and are sent after the next login. A manual phone checklist is in `docs/OPERATIONS.md`.
+
+**Debug:** `DJANGO_DEBUG=1` is for local development only (detailed error pages). Normal use is `DJANGO_DEBUG=0`, which needs a `DJANGO_SECRET_KEY`; `.env.example` shows how to generate one.
+
+**LAN mode (phone on your home Wi-Fi):** off by default; the app only listens on this computer. To open it from a phone on the same network, set `TWIN_LAN_HOST` in `.env` to this computer's address (for example `192.168.1.20`, from `ipconfig`), then `docker compose up -d` and open `http://192.168.1.20:8000/` on the phone.
+- Use LAN mode only on a trusted home network, never on shared or public Wi-Fi: it is plain HTTP until HTTPS arrives (M6).
+- LAN mode refuses to start while `DJANGO_DEBUG=1`.
+- Logins are rate-limited (5 failed attempts per username or address, then a 15-minute wait).
+
 ## Stop
 
 ```powershell

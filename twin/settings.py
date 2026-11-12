@@ -19,6 +19,20 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
+# LAN mode (M4): off unless TWIN_LAN_HOST is set (the computer's address on a trusted home
+# network, e.g. 192.168.1.20). docker-compose.yml binds the port to it; otherwise 127.0.0.1 only.
+# HTTP only until M6 adds HTTPS, so never with debug on.
+TWIN_LAN_HOST = os.environ.get("TWIN_LAN_HOST", "").strip()
+CSRF_TRUSTED_ORIGINS = []
+if TWIN_LAN_HOST:
+    if DEBUG:
+        raise ImproperlyConfigured(
+            "LAN mode (TWIN_LAN_HOST) refuses to start while DJANGO_DEBUG=1; debug is for local development only."
+        )
+    if TWIN_LAN_HOST not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(TWIN_LAN_HOST)
+    CSRF_TRUSTED_ORIGINS.append(f"http://{TWIN_LAN_HOST}:8000")
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -27,10 +41,17 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "core",
+    "ui",
+    # UI modules (each ships a module.json manifest; ui/modules.py is the registry).
+    "modules.probes",
+    "modules.zone",
+    "modules.training",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves static files (admin and app) with debug off; no CDN.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -82,4 +103,25 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+# Serve straight from the app folders (no collectstatic step needed for a personal instance).
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = DEBUG
+
+# Phone app (M4): one contributor per instance in Nymbus phase 1; every login sees this one.
+TWIN_CONTRIBUTOR = os.environ.get("TWIN_CONTRIBUTOR", "mike")
+LOGIN_URL = "ui:login"
+LOGIN_REDIRECT_URL = "ui:home"
+LOGOUT_REDIRECT_URL = "ui:login"
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
+X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+# Login rate limit: after this many failed attempts for one username or one address,
+# further attempts are refused for the window (ui/views.py, LoginView).
+TWIN_LOGIN_MAX_FAILURES = 5
+TWIN_LOGIN_WINDOW_SECONDS = 15 * 60
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

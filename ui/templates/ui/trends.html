@@ -1,0 +1,14 @@
+{% extends "ui/base.html" %}
+{% block title %}Trends - Twin{% endblock %}
+{% block content %}
+<h1>Trends</h1>
+<p>{{ data.first_day|date:"j M" }} to {{ data.today|date:"j M Y" }} &middot;
+  {% if data.weeks == 4 %}<strong>4 weeks</strong> | <a href="?weeks=12">12 weeks</a>{% else %}<a href="?weeks=4">4 weeks</a> | <strong>12 weeks</strong>{% endif %}</p>
+{% for c in data.charts %}
+<figure class="chart-box">
+  <figcaption><strong>{{ c.title }}</strong></figcaption>
+  {{ c.svg|safe }}
+  <p class="source">Source: {{ c.source }}. {{ disclaimer }}</p>
+</figure>
+{% endfor %}
+{% endblock %}

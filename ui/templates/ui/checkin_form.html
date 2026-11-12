@@ -1,0 +1,27 @@
+{% extends "ui/base.html" %}
+{% block title %}{{ label }} - Twin{% endblock %}
+{% block content %}
+<h1>{% if supersedes %}Correct: {{ label|lower }}{% else %}{{ label }}{% endif %}</h1>
+{% if supersedes %}<p class="note">Saving creates a corrected version. The earlier version stays in history.</p>{% endif %}
+{% if form.non_field_errors %}
+<div class="error" role="alert" id="err-form">{% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>
+{% endif %}
+<form method="post" action="{{ request.path }}" class="stack" novalidate data-offline="{{ label }}">
+  {% csrf_token %}
+  {% if supersedes %}<input type="hidden" name="supersedes" value="{{ supersedes.cid }}">{% endif %}
+  {% for field in form %}
+  <div class="field{% if field.errors %} has-error{% endif %}{% if field.widget_type == 'checkbox' %} check{% endif %}">
+    {% if field.widget_type == 'checkbox' %}
+      {{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {% else %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">(required)</span>{% endif %}</label>
+      {{ field }}
+    {% endif %}
+    {% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+    {% if field.errors %}<p class="error" id="err-{{ field.name }}">{{ field.errors|join:" " }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <button type="submit" class="primary">{% if supersedes %}Save correction{% else %}Save{% endif %}</button>
+</form>
+<p><a href="{% url 'ui:checkin_index' %}">Back to check-ins</a></p>
+{% endblock %}
