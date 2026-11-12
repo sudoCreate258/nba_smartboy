@@ -49,13 +49,14 @@ def export_lines(contributor, now=None):
     yield json.dumps({"type": "export", "format": FORMAT, "version": VERSION, "contributor": contributor.handle,
                       "timezone": contributor.timezone, "exported_at": _iso(now or timezone.now())}, sort_keys=True)
     events = []
-    for model in EXPORT_MODELS:
+    for model in RECORD_MODELS:
         for r in model.objects.filter(contributor=contributor):
             events.append((r.created_at, 0, r.pk, model.record_kind, r))
     for s in Supersession.objects.filter(contributor=contributor):
         events.append((s.created_at, 1, s.pk, "", s))
     events.sort(key=lambda e: e[:4])
-    for _, _, _, kind, obj in events:
+    for obj in [e[4] for e in events] + _ledger_in_replay_order(contributor):
+        kind = obj.record_kind if isinstance(obj, ProvenancedRecord) else ""
         if isinstance(obj, ProvenancedRecord):
             yield json.dumps({"type": "record", "kind": kind, "cid": obj.cid, "contributor": contributor.handle,
                               "fields": normalize_fields(obj.domain_fields()), "created_at": _iso(obj.created_at)},
@@ -63,6 +64,23 @@ def export_lines(contributor, now=None):
         else:
             yield json.dumps({"type": "supersession", "old_cid": obj.old_cid, "new_cid": obj.new_cid,
                               "reason": obj.reason, "created_at": _iso(obj.created_at)}, sort_keys=True)
+
+
+def _ledger_in_replay_order(contributor):
+    """Ledger records in an order that replays exactly as they were validated, independent of
+    `created_at` (a host clock that steps back must not reorder the file): access events by seq;
+    before each event, every grant and revocation whose own time (start / at) is not after the
+    event's time; at equal times a revocation comes before a grant (a new grant may start the
+    instant the old one is revoked). The rest follows the last event."""
+    pending = sorted([(g.start, 1, g.pk, g) for g in Grant.objects.filter(contributor=contributor)]
+                     + [(r.at, 0, r.pk, r) for r in Revocation.objects.filter(contributor=contributor)],
+                     key=lambda item: item[:3])
+    out = []
+    for event in AccessEvent.objects.filter(contributor=contributor).order_by("seq"):
+        while pending and pending[0][0] <= event.at:
+            out.append(pending.pop(0)[3])
+        out.append(event)
+    return out + [item[3] for item in pending]
 
 
 def verify_line(item):

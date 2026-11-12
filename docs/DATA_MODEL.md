@@ -49,8 +49,10 @@ First draft of the Nymbus interchange contract. `manage.py export_my_data` and t
 `manage.py import_my_data <file>` replays the lines into a database with no records for that
 contributor, checks every CID (against the line and against the stored record) and rolls the
 whole file back on any error. `created_at` is informational; restored rows get the import time.
-The ledger (M5: `grant`, `revocation`, `access_event`) is exported as ordinary record lines; the
-import replays each access event against the one before it and checks the whole hash chain.
+The ledger (M5: `grant`, `revocation`, `access_event`) is exported as ordinary record lines after
+the records, in replay order (events by `seq`; before each event the grants and revocations whose
+`start`/`at` is not after it, a revocation first at equal times), not by `created_at`; the import
+replays each access event against the one before it and then runs the full ledger verification.
 Not included: Django users, ProbeBaseline settings, module on/off settings.
 
 ## Deposit statement (nymbus-statement-jsonl, version 1)
