@@ -30,15 +30,17 @@ def local_day_bounds(contributor, day):
 
 
 def checkins(contributor, day):
-    """[(label, done)] for the five daily check-ins on the contributor's local `day`."""
+    """[(label, done, kind)] for the five daily check-ins on the contributor's local `day`."""
     start, end = local_day_bounds(contributor, day)
     mine = {"contributor": contributor}
     return [
-        ("Daily snapshot", DailySnapshot.objects.current().filter(date=day, **mine).exists()),
-        ("Probe", ProbeSession.objects.current().filter(started_at__gte=start, started_at__lt=end, **mine).exists()),
-        ("Work block", WorkBlock.objects.current().filter(start__gte=start, start__lt=end, **mine).exists()),
-        ("Discomfort check", DiscomfortCheck.objects.current().filter(at__gte=start, at__lt=end, **mine).exists()),
-        ("Reset", Reset.objects.current().filter(at__gte=start, at__lt=end, **mine).exists()),
+        ("Daily snapshot", DailySnapshot.objects.current().filter(date=day, **mine).exists(), "snapshot"),
+        ("Probe", ProbeSession.objects.current().filter(started_at__gte=start, started_at__lt=end, **mine).exists(),
+         "probe"),
+        ("Work block", WorkBlock.objects.current().filter(start__gte=start, start__lt=end, **mine).exists(), "work"),
+        ("Discomfort check", DiscomfortCheck.objects.current().filter(at__gte=start, at__lt=end, **mine).exists(),
+         "discomfort"),
+        ("Reset", Reset.objects.current().filter(at__gte=start, at__lt=end, **mine).exists(), "reset"),
     ]
 
 

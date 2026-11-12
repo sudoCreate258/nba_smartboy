@@ -1,0 +1,19 @@
+{% extends "ui/base.html" %}
+{% block title %}Recent - Twin{% endblock %}
+{% block content %}
+<h1>Recent records</h1>
+<p class="note">Current records from the last {{ days }} days. "Correct this" saves a corrected version; nothing is edited or deleted.</p>
+{% for kind, label, items in groups %}
+<section aria-labelledby="h-{{ kind }}">
+  <h2 id="h-{{ kind }}">{{ label }}</h2>
+  {% if items %}
+  <ul class="records">
+    {% for record, when in items %}
+    <li><span>{% if kind == "snapshot" %}{{ when|date:"D j M" }}{% else %}{{ when|date:"D j M H:i" }}{% endif %} &middot; {{ record }}</span>
+      <a href="{% url 'ui:checkin' kind %}?correct={{ record.cid }}">Correct this<span class="visually-hidden"> {{ label|lower }} from {{ when|date:"j M H:i" }}</span></a></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="note">None.</p>{% endif %}
+</section>
+{% endfor %}
+{% endblock %}

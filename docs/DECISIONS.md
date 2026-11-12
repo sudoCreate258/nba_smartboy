@@ -180,6 +180,9 @@ Choices the spec left open. Owner or planner may overrule.
 - **App name:** `ui` (the design allows `app` or `ui`; `ui` avoids confusion with Django "apps").
 - **Which contributor a login sees:** Nymbus phase 1 has one contributor per instance, so every login maps to `TWIN_CONTRIBUTOR` (env, default `mike`). Linking Django users to contributors is Nymbus phase 2.
 - **Home screen stop signals:** sharp_or_numb discomfort checks and training sets with joint pain >= 2 in the current local week, plus a count of earlier ones.
+- **One write path (closes M3 review #9):** `core/services/records.save_record()` does the duplicate check, the correction (`replaces_cid` for overlap/order checks, Supersession event, revert to an identical earlier record) and the contributor lock. The admin and the app both call it; DailySnapshots go through `record_snapshot` inside it.
+- **Check-in forms:** one page per record type (snapshot, probe, work block, discomfort, reset), no JavaScript. Local `datetime-local` input in the contributor's time zone; DST-ambiguous or skipped times are rejected. The reset form picks the before/after mini-probes from the last 3 days instead of typing CIDs. App-entered snapshots get `source = manual`.
+- **Correct this:** from the Recent page (current records of the last 14 days). The form is prefilled; fields the form does not show (e.g. `spo2`, ratings, the original `source`) are carried over from the record being corrected, so a correction never drops data. A snapshot correction keeps its date. Records already superseded cannot be corrected (the current version must be).
 
 ### Planner answers to M3 (2026-11-11)
 - M3 builder choices accepted.

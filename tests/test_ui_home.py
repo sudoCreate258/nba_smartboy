@@ -57,7 +57,7 @@ def test_checkins_done_and_missing(mike):
     DailySnapshot(contributor=mike, date=day, source="manual", sleep_score=80).save()
     ProbeSession(contributor=mike, started_at=NOW, kind="mini_puzzle", accuracy_pct=80).save()
     ProbeSession(contributor=mike, started_at=NOW - datetime.timedelta(days=1), kind="puzzle_set").save()
-    assert dict(checkins(mike, day)) == {"Daily snapshot": True, "Probe": True, "Work block": False,
+    assert {label: done for label, done, _ in checkins(mike, day)} == {"Daily snapshot": True, "Probe": True, "Work block": False,
                                         "Discomfort check": False, "Reset": False}
 
 
@@ -65,8 +65,8 @@ def test_checkins_use_the_local_day(mike):
     # 01:00 UTC on the 12th is 20:00 on the 11th in New York.
     DiscomfortCheck(contributor=mike, at=datetime.datetime(2026, 11, 12, 1, 0, tzinfo=UTC), area="neck", score=2,
                     trigger="other").save()
-    assert dict(checkins(mike, datetime.date(2026, 11, 11)))["Discomfort check"] is True
-    assert dict(checkins(mike, datetime.date(2026, 11, 12)))["Discomfort check"] is False
+    assert {l: d for l, d, _ in checkins(mike, datetime.date(2026, 11, 11))}["Discomfort check"] is True
+    assert {l: d for l, d, _ in checkins(mike, datetime.date(2026, 11, 12))}["Discomfort check"] is False
 
 
 def test_today_collects_stop_signals_from_discomfort_and_training(mike):

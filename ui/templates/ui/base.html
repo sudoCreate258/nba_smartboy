@@ -13,11 +13,14 @@
   {% if user.is_authenticated %}
   <nav aria-label="Main">
     <a href="{% url 'ui:home' %}"{% if request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>Today</a>
+    <a href="{% url 'ui:checkin_index' %}"{% if request.resolver_match.url_name == 'checkin_index' or request.resolver_match.url_name == 'checkin' %} aria-current="page"{% endif %}>Check in</a>
+    <a href="{% url 'ui:recent' %}"{% if request.resolver_match.url_name == 'recent' %} aria-current="page"{% endif %}>Recent</a>
     <form method="post" action="{% url 'ui:logout' %}" class="inline">{% csrf_token %}<button type="submit" class="link">Log out</button></form>
   </nav>
   {% endif %}
 </header>
 <main id="main">
+{% if messages %}<div class="messages" role="status">{% for m in messages %}<p class="msg msg-{{ m.tags }}">{{ m }}</p>{% endfor %}</div>{% endif %}
 {% block content %}{% endblock %}
 </main>
 <footer><p>{{ disclaimer|default:"Load gauge, not a medical assessment." }}</p></footer>

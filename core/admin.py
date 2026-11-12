@@ -22,6 +22,7 @@ from .models import (
     WorkBlock,
 )
 from .services import SKIPPED, SUPERSEDED, record_snapshot
+from .services.records import save_record
 from .services.training_report import current_session_for, sets_of
 
 
@@ -42,12 +43,10 @@ class ImmutableAdmin(admin.ModelAdmin):
         return False
 
     def save_model(self, request, obj, form, change):
-        existing = self.model.objects.filter(cid=obj.compute_cid()).first()
-        if existing is not None:
-            obj.pk, obj.cid, obj._state.adding = existing.pk, existing.cid, False
+        record, outcome = save_record(obj)
+        obj.pk, obj.cid, obj._state.adding = record.pk, record.cid, False
+        if outcome == SKIPPED:
             self.message_user(request, "Identical record already exists; nothing written.", messages.WARNING)
-        else:
-            super().save_model(request, obj, form, change)
 
 
 class CorrectableAdmin(ImmutableAdmin):
@@ -106,11 +105,15 @@ class CorrectableAdmin(ImmutableAdmin):
         return CorrectionForm
 
     def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
         old = self.model.objects.filter(cid=request.GET.get("supersedes", "")).first()
-        if old is None or old.cid == obj.cid:
+        if old is None:
+            return super().save_model(request, obj, form, change)
+        if old.cid == obj.compute_cid():  # unchanged correction form: nothing to record
+            obj.pk, obj.cid, obj._state.adding = old.pk, old.cid, False
+            self.message_user(request, "Identical record already exists; nothing written.", messages.WARNING)
             return
-        Supersession.record(old, obj, reason="admin correction")
+        record, _ = save_record(obj, supersedes=old, reason="admin correction")
+        obj.pk, obj.cid, obj._state.adding = record.pk, record.cid, False
         self.message_user(request, "Saved as a correction; the previous record is superseded.")
 
 

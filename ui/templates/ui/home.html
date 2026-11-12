@@ -16,8 +16,9 @@
 <section aria-labelledby="checkins-h">
   <h2 id="checkins-h">Check-ins</h2>
   <ul class="checks">
-    {% for label, done in t.checkins %}
-    <li class="{% if done %}done{% else %}missing{% endif %}"><span class="mark" aria-hidden="true">{% if done %}&#10003;{% else %}&#9675;{% endif %}</span> {{ label }}: {% if done %}done{% else %}missing{% endif %}</li>
+    {% for label, done, kind in t.checkins %}
+    <li class="{% if done %}done{% else %}missing{% endif %}"><span class="mark" aria-hidden="true">{% if done %}&#10003;{% else %}&#9675;{% endif %}</span> {{ label }}: {% if done %}done{% else %}missing{% endif %}
+      <a class="go" href="{% url 'ui:checkin' kind %}">{% if done %}Add another{% else %}Add{% endif %}<span class="visually-hidden"> {{ label|lower }}</span></a></li>
     {% endfor %}
   </ul>
 </section>
