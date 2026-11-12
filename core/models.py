@@ -10,7 +10,25 @@ from django.utils import timezone
 
 from nymbus.provenance import canonical_bytes, compute_cid
 
-_NON_CONTENT_FIELDS = {"cid", "contributor", "created_at"}
+_NON_CONTENT_FIELDS = {"cid", "contributor", "created_at", "created_seq"}
+# Identity and bookkeeping columns of a record: never content, never copied into a correction.
+IDENTITY_FIELDS = {"id"} | _NON_CONTENT_FIELDS
+CREATION_SEQUENCE = "core_creation_seq"
+
+
+class NextCreation(models.Func):
+    """nextval() of the one sequence shared by every record table, Supersession and the ledger:
+    a creation order that a host clock stepping back cannot reorder (M6; export replays in it)."""
+    template = f"nextval('{CREATION_SEQUENCE}')"
+    output_field = models.BigIntegerField()
+
+    def __init__(self):
+        super().__init__()
+
+
+def creation_seq_field():
+    return models.BigIntegerField(db_default=NextCreation(), editable=False, db_index=True,
+                                  help_text="Creation order across all records (not content).")
 
 
 _WIDE = Context(prec=60)
@@ -88,6 +106,7 @@ class Supersession(models.Model):
     contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
     reason = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    created_seq = creation_seq_field()
 
     objects = AppendOnlyQuerySet.as_manager()
 
@@ -184,6 +203,7 @@ class ProvenancedRecord(models.Model):
     cid = models.CharField(max_length=128, unique=True, editable=False)
     contributor = models.ForeignKey(Contributor, on_delete=models.PROTECT)
     created_at = models.DateTimeField(auto_now_add=True)
+    created_seq = creation_seq_field()
 
     objects = RecordQuerySet.as_manager()
 
@@ -215,7 +235,7 @@ class ProvenancedRecord(models.Model):
 
     def clean(self):
         for field in self._meta.concrete_fields:
-            if isinstance(field, models.DateTimeField) and field.name != "created_at":
+            if isinstance(field, models.DateTimeField) and field.name not in IDENTITY_FIELDS:
                 value = getattr(self, field.attname)
                 if isinstance(value, datetime.datetime) and timezone.is_naive(value):
                     raise ValidationError({field.name: "Naive datetimes are not allowed; include a time zone."})

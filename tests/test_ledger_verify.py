@@ -50,7 +50,7 @@ def run():
 
 def test_intact_ledger_verifies(mike):
     assert run().strip() == ("Ledger OK: 2 grants, 1 revocations, 4 access events; hash chain intact; "
-                             "5 record CIDs recomputed.")
+                             "5 record CIDs recomputed; no backup anchor yet.")
 
 
 def test_pure_chain_check():
@@ -87,8 +87,11 @@ def test_tampering_is_detected(mike, sql, expect):
 
 def test_a_changed_record_that_was_read_is_detected(mike):
     read = AccessEvent.objects.get(seq=1).record_cids[0]
-    with connection.cursor() as cur:  # core tables have no trigger: the record CID check catches it
+    with connection.cursor() as cur:  # as an attacker who switched the record trigger off (M6)
+        cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        cur.execute("ALTER TABLE core_probesession DISABLE TRIGGER core_probesession_append_only")
         cur.execute("UPDATE core_probesession SET accuracy_pct = 99.9 WHERE cid = %s", [read])
+        cur.execute("ALTER TABLE core_probesession ENABLE TRIGGER core_probesession_append_only")
     with pytest.raises(CommandError, match=f"record {read} no longer matches its CID"):
         run()
 

@@ -58,7 +58,7 @@ docker compose exec web python manage.py ledger_read --recipient sim-research-pa
 docker compose exec web python manage.py verify_ledger    # recompute every CID and the hash chain; non-zero on any break
 ```
 
-The **Statement** page shows, per month and category, who read how many records, for what purpose, and the simulated credits (one per record read; not money). "Download statement" gives the same as JSON Lines with the statement's CID. Ledger rows cannot be changed or deleted, even with SQL (database triggers); `verify_ledger` detects edits made by someone who switched the triggers off. Removing the newest events or a revocation leaves a shorter but consistent chain, which only an older export or backup can reveal, so keep the backups running.
+The **Statement** page shows, per month and category, who read how many records, for what purpose, and the simulated credits (one per record read; not money). "Download statement" gives the same as JSON Lines with the statement's CID. Ledger rows cannot be changed or deleted, even with SQL (database triggers); `verify_ledger` detects edits made by someone who switched the triggers off. Removing the newest events or a revocation would leave a shorter but consistent chain, so every backup set records the ledger head (number of reads, hash of the newest, grant and revocation counts) in its manifest. `verify_ledger` compares the live ledger with the newest published backup, and the Statement page shows the head and whether it matches. For an anchor the database cannot touch, compare with a manifest you keep elsewhere: `verify_ledger --manifest path/to/manifest.json` (any set's `manifest.json`, downloaded with rclone). Keep the backups running.
 
 ## Phone checklist (manual)
 
@@ -70,7 +70,8 @@ The test suite checks the server side of the phone app and that the scripts pars
 4. Repeat step 3, then log out and log in again before restarting the instance: the queued check-in is still sent once (fresh CSRF token).
 5. Queue a correction of a record, correct the same record online, then let the queue send: the queued item is listed as "could not be saved: ... already corrected" and later items still send.
 6. On `http://localhost:8000/` only: install to the home screen, view Trends, go offline, reopen Trends (cached copy), log out, go offline again: Trends is no longer available offline.
-7. In LAN mode (`http://<address>:8000/` on the phone): steps 1-5 work; install and offline pages are not offered (plain HTTP; HTTPS is M6).
+7. In LAN mode (`http://<address>:8000/` on the phone): steps 1-5 work; install and offline pages are not offered (plain HTTP).
+8. With LAN HTTPS (`https://<address>:8443/`, CA trusted on the phone, README): steps 1-6 work on the phone, install and offline pages included.
 
 ## Encrypted backup
 
@@ -97,6 +98,17 @@ Back up on demand: `docker compose run --rm backup python manage.py backup_now`.
 Each run uploads a set (database dump, your data export, a manifest) into a `staging/` area, then verifies it by downloading it again, checking SHA-256, restoring the dump into a scratch database and confirming every record and correction matches the export. Only a verified set is moved to `sets/`; `latest` and retention only ever look there, so a set that failed verification can never be restored by mistake or push a good set out. The dump and the export are taken from one database snapshot, so they agree even while the app is in use. It keeps the last 7 daily and 4 weekly sets, deleting older ones only after the new set is published. `data/inbox/` is not backed up unless `BACKUP_INCLUDE_INBOX=1`.
 
 **The backup refuses any remote that is not an rclone `crypt` remote** (an alias that leads to one is fine), so a mistake in `BACKUP_REMOTE` stops the run before anything is built instead of uploading readable files. Today shows red with the reason if a run fails or is interrupted (machine off, restart); an interrupted night is retried automatically.
+
+**Never use an employer-managed account** (work Google Drive, OneDrive for Business, ...) as the remote: your health data does not belong in a place your employer administers.
+
+**Another target: a Raspberry Pi at home over SFTP** (instead of Google Drive). Make an SFTP remote to the Pi, then the same crypt remote on top of it, so the Pi too only ever holds ciphertext:
+
+```text
+rclone config create pi-sftp sftp host 192.168.1.30 user twinbackup key_file C:/Users/you/.ssh/twin-backup
+rclone config create twin-crypt crypt remote pi-sftp:twin-backup password <your password> password2 <your salt> --obscure
+```
+
+`BACKUP_REMOTE=twin-crypt:` stays the same; the rest of this section applies unchanged.
 
 ### Restore onto a fresh machine
 
@@ -152,6 +164,33 @@ docker compose start web
 `backups/` is gitignored. Restoring a dump keeps every CID, because CIDs are stored values computed from content.
 
 Check a restore: `docker compose exec web python manage.py showmigrations core` lists every migration as applied, and the reports show the expected records. To test a backup without touching the live data, restore it into a scratch database (`createdb -U twin twin_restore_check`, the `psql -f` step with `-d twin_restore_check`, compare row counts, then `dropdb -U twin twin_restore_check`).
+
+## Records cannot be changed, even with SQL
+
+Every record table, the corrections (`core_supersession`) and the ledger tables refuse UPDATE and DELETE in the database itself (row triggers, M6). A mistake is fixed with a correction (a new record), never by editing. **There is no supported bypass for normal use.** What still works: inserts, a restore (it replaces whole tables), and `docker compose down -v` (deletes the database). Switching a trigger off (`ALTER TABLE ... DISABLE TRIGGER`) is a database-owner action outside normal use; any row changed that way no longer matches its CID, and `verify_ledger`, the backup verify and the import all report it.
+
+## Security checks and signed images
+
+```powershell
+powershell -File scripts/scan.ps1          # vulnerability gate: requirements.txt and the built image
+powershell -File scripts/sign-image.ps1    # build twin-web:<version> and sign it (needs your key)
+powershell -File scripts/sign-image.ps1 -Verify
+```
+
+- **Scan:** osv-scanner from Alpine 3.20 checks the pinned dependencies and the image (read from a `docker save` file; the Docker socket is never shared). It fails on HIGH/CRITICAL advisories that have a fix. A reviewed exception goes into `scan-ignore.txt` with the reason, reviewer and date. Advisories without a fix are listed, not failed. GitHub CI runs the same scan.
+- **Signing key (once, you):** create a cosign key pair in a folder **outside** this repository and keep the password in your password manager:
+  `docker run --rm -it -v C:/Users/you/keys/twin-cosign:/k -w /k alpine:3.20 sh -c "apk add cosign && cosign generate-key-pair"`
+  Then `$env:COSIGN_KEY_DIR = "C:/Users/you/keys/twin-cosign"` and `$env:COSIGN_PASSWORD = "<password>"` in the PowerShell window before signing. Without a key the script prints `SKIPPED: no signing key` and signs nothing.
+- **What is signed:** the image ID (the digest that covers every layer), the version (`git describe`) and the commit, in `dist/twin-web-<version>.json`; the signature is `dist/twin-web-<version>.json.sig`. Signing is offline (no transparency log). `-Verify` needs only `cosign.pub` and fails if the image you have is not the one that was signed.
+- **Multi-arch (ARM, Raspberry Pi) images:** not built (deferred, see DECISIONS). On a Pi, build the image there: `docker compose build`.
+
+## Updating
+
+```powershell
+powershell -File scripts/update.ps1
+```
+
+Pulls the current branch (fast-forward only), rebuilds the image with the latest Debian updates, restarts, migrates and runs the local gate; it stops at the first failing step. Dependency updates arrive as weekly Dependabot PRs into `develop`, each tested by CI before a human merges it.
 
 ## Upgrading
 

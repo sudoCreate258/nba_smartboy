@@ -90,7 +90,9 @@ skipped by a daylight-saving change are rejected on import.
 
 - Every record type below is a `ProvenancedRecord`: it has a `contributor` and a `cid`, and it is
   immutable once saved (`save()` on a stored record, queryset `update()` and `delete()` all raise
-  `ImmutableRecordError`).
+  `ImmutableRecordError`). The database enforces it too: row triggers refuse UPDATE and DELETE on
+  every record table, `core_supersession` and the ledger tables (migrations `core/0016`,
+  `ledger/0002`).
 - **CID** = CIDv1, raw codec (0x55), sha2-256, base32 lower case without padding (`bafkrei...`),
   over canonical JSON bytes: `{"contributor": <handle>, "fields": {...}, "kind": <record kind>}`
   with sorted keys, compact separators and UTF-8 (`nymbus/provenance.py`).
@@ -113,7 +115,9 @@ skipped by a daylight-saving change are rejected on import.
 ## Export format (nymbus-jsonl, version 1)
 
 First draft of the Nymbus interchange contract. `manage.py export_my_data` and the app's
-"Download my data" write one JSON object per line (UTF-8), in the order things were created:
+"Download my data" write one JSON object per line (UTF-8), in the order things were created
+(`created_seq`, one database sequence shared by every record table, Supersession and the ledger,
+so a host clock that steps back cannot reorder a correction before its record):
 
 - Line 1: `{"type": "export", "format": "nymbus-jsonl", "version": 1, "contributor": <handle>,
   "timezone": <IANA zone>, "exported_at": <UTC ISO>}`
@@ -126,8 +130,10 @@ First draft of the Nymbus interchange contract. `manage.py export_my_data` and t
 `manage.py import_my_data <file>` replays the lines into a database with no records for that
 contributor, checks every CID (against the line and against the stored record) and rolls the
 whole file back on any error. `created_at` is informational; restored rows get the import time.
-The ledger (M5: `grant`, `revocation`, `access_event`) is exported as ordinary record lines; the
-import replays each access event against the one before it and checks the whole hash chain.
+The ledger (M5: `grant`, `revocation`, `access_event`) is exported as ordinary record lines after
+the records, in replay order (events by `seq`; before each event the grants and revocations whose
+`start`/`at` is not after it, a revocation first at equal times), not by `created_at`; the import
+replays each access event against the one before it and then runs the full ledger verification.
 Not included: Django users, ProbeBaseline settings, module on/off settings.
 
 ## Deposit statement (nymbus-statement-jsonl, version 1)
@@ -173,7 +179,7 @@ def _bounds(field):
 
 
 def _required(field):
-    if field.primary_key or field.name in {"cid", "created_at"}:
+    if field.primary_key or field.name in {"cid", "created_at", "created_seq"}:
         return "auto"
     if isinstance(field, models.BooleanField) or field.has_default():
         return f"default `{field.get_default()}`" if not callable(field.default) else "default now"

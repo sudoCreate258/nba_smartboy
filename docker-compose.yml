@@ -15,6 +15,7 @@ services:
 
   web:
     build: .
+    image: twin-web:local  # one image for web, web-https and backup (update.ps1 rebuilds it once)
     command: python manage.py runserver 0.0.0.0:8000
     env_file:
       - .env
@@ -25,15 +26,45 @@ services:
       - "${TWIN_LAN_HOST:-127.0.0.1}:8000:8000"
     volumes:
       - .:/app
+    tmpfs:
+      - /app/certs  # masks certs/ inside /app (keys are mounted only where needed)
     depends_on:
       db:
         condition: service_healthy
 
+  # LAN HTTPS (M6), opt-in: `docker compose --profile https up -d web-https`. A TLS server (gunicorn)
+  # on TWIN_HTTPS_HOST:8443 with the server certificate from scripts/lan-cert.ps1 (certs/server/,
+  # gitignored, mounted read-only here only; the CA key lives outside the repository). Only this
+  # process runs with TWIN_HTTPS=1 (secure cookies, HSTS).
+  web-https:
+    build: .
+    image: twin-web:local  # one image for web, web-https and backup (update.ps1 rebuilds it once)
+    profiles: ["https"]
+    command: >-
+      gunicorn twin.wsgi:application --bind 0.0.0.0:8443 --workers 2 --access-logfile -
+      --certfile /run/secrets/tls/server.crt --keyfile /run/secrets/tls/server.key
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      TWIN_HTTPS: "1"
+    ports:
+      - "${TWIN_HTTPS_HOST:-127.0.0.1}:8443:8443"
+    volumes:
+      - .:/app
+      - ./certs/server:/run/secrets/tls:ro
+    tmpfs:
+      - /app/certs  # masks certs/ inside /app (keys are mounted only where needed)
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
   # Encrypted off-hours backup (M4.5), opt-in: `docker compose --profile backup up -d backup`.
   # The rclone config (with the crypt remote) stays outside the repository and is mounted
   # read-only into this service only; set RCLONE_CONFIG_HOST in .env (see docs/OPERATIONS.md).
   backup:
     build: .
+    image: twin-web:local  # one image for web, web-https and backup (update.ps1 rebuilds it once)
     profiles: ["backup"]
     command: python manage.py backup_loop
     env_file:
@@ -44,6 +75,8 @@ services:
     volumes:
       - .:/app
       - ${RCLONE_CONFIG_HOST:-./backup-not-configured/rclone.conf}:/run/secrets/rclone.conf:ro
+    tmpfs:
+      - /app/certs  # masks certs/ inside /app (keys are mounted only where needed)
     depends_on:
       db:
         condition: service_healthy

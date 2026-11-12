@@ -1,0 +1,18 @@
+# Dependency update PRs (M6 R7): weekly, into develop only (never main). Each PR goes through CI
+# (tests + vulnerability scan) and a human merge like any other change.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    target-branch: develop
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    target-branch: develop
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]

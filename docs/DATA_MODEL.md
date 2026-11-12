@@ -11,7 +11,9 @@ skipped by a daylight-saving change are rejected on import.
 
 - Every record type below is a `ProvenancedRecord`: it has a `contributor` and a `cid`, and it is
   immutable once saved (`save()` on a stored record, queryset `update()` and `delete()` all raise
-  `ImmutableRecordError`).
+  `ImmutableRecordError`). The database enforces it too: row triggers refuse UPDATE and DELETE on
+  every record table, `core_supersession` and the ledger tables (migrations `core/0016`,
+  `ledger/0002`).
 - **CID** = CIDv1, raw codec (0x55), sha2-256, base32 lower case without padding (`bafkrei...`),
   over canonical JSON bytes: `{"contributor": <handle>, "fields": {...}, "kind": <record kind>}`
   with sorted keys, compact separators and UTF-8 (`nymbus/provenance.py`).
@@ -34,7 +36,9 @@ skipped by a daylight-saving change are rejected on import.
 ## Export format (nymbus-jsonl, version 1)
 
 First draft of the Nymbus interchange contract. `manage.py export_my_data` and the app's
-"Download my data" write one JSON object per line (UTF-8), in the order things were created:
+"Download my data" write one JSON object per line (UTF-8), in the order things were created
+(`created_seq`, one database sequence shared by every record table, Supersession and the ledger,
+so a host clock that steps back cannot reorder a correction before its record):
 
 - Line 1: `{"type": "export", "format": "nymbus-jsonl", "version": 1, "contributor": <handle>,
   "timezone": <IANA zone>, "exported_at": <UTC ISO>}`
@@ -47,8 +51,10 @@ First draft of the Nymbus interchange contract. `manage.py export_my_data` and t
 `manage.py import_my_data <file>` replays the lines into a database with no records for that
 contributor, checks every CID (against the line and against the stored record) and rolls the
 whole file back on any error. `created_at` is informational; restored rows get the import time.
-The ledger (M5: `grant`, `revocation`, `access_event`) is exported as ordinary record lines; the
-import replays each access event against the one before it and checks the whole hash chain.
+The ledger (M5: `grant`, `revocation`, `access_event`) is exported as ordinary record lines after
+the records, in replay order (events by `seq`; before each event the grants and revocations whose
+`start`/`at` is not after it, a revocation first at equal times), not by `created_at`; the import
+replays each access event against the one before it and then runs the full ledger verification.
 Not included: Django users, ProbeBaseline settings, module on/off settings.
 
 ## Deposit statement (nymbus-statement-jsonl, version 1)
@@ -71,6 +77,7 @@ Per local month: line 1 `{"type": "statement", "format": "nymbus-statement-jsonl
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `date` | date | required |  |  |
 | `sleep_score` | int >= 0 | optional | >= 0; <= 100 |  |
 | `bedtime` | datetime (UTC) | optional |  |  |
@@ -100,6 +107,7 @@ Rules:
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `started_at` | datetime (UTC) | required |  |  |
 | `kind` | text (max 16) | required | one of: `puzzle_set`, `rapid_game`, `module`, `mini_puzzle` |  |
 | `time_control` | text (max 32) | optional |  |  |
@@ -127,6 +135,7 @@ Rules:
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `start` | datetime (UTC) | required |  |  |
 | `end` | datetime (UTC) | required |  |  |
 | `task_type` | text (max 16) | required | one of: `code`, `meeting`, `admin`, `study`, `other` |  |
@@ -152,6 +161,7 @@ A quick discomfort rating. sharp_or_numb is a stop signal, not a score.
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `at` | datetime (UTC) | required |  |  |
 | `area` | text (max 16) | required | one of: `neck`, `shoulder`, `wrist`, `hip`, `low_back`, `other` |  |
 | `score` | int >= 0 | required | <= 10 |  |
@@ -173,6 +183,7 @@ A short reset between work blocks, bracketed by two mini-probes.
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `at` | datetime (UTC) | required |  |  |
 | `kind` | text (max 20) | required | one of: `walk`, `cold_shower`, `dead_hang_mobility`, `breathing`, `nap`, `none` |  |
 | `duration_min` | int >= 0 | optional | <= 240 |  |
@@ -193,6 +204,7 @@ Weekly self-rated burnout check. Only the instrument name and score are stored; 
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `week_start` | date | required |  | Local Monday of the week. |
 | `instrument` | text (max 100) | required |  | Name of the questionnaire used. |
 | `score` | decimal(6,2) | required | >= 0 |  |
@@ -214,6 +226,7 @@ A strength or conditioning session (RP-style programming fields).
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `started_at` | datetime (UTC) | required |  |  |
 | `ended_at` | datetime (UTC) | optional |  |  |
 | `program` | text (max 100) | optional |  | Free text, e.g. "RP Hypertrophy". |
@@ -237,6 +250,7 @@ One set of a TrainingSession, referenced by the session's CID.
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `session_cid` | text (max 128) | required |  | CID of the TrainingSession. |
 | `order` | int >= 0 | required | >= 1 |  |
 | `exercise` | text (max 100) | required |  |  |
@@ -266,6 +280,7 @@ Permission for one simulated recipient to read one data category, for a stated p
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `category` | text (max 64) | required |  |  |
 | `recipient` | text (max 32) | required | one of: `self-analysis`, `sim-research-partner` |  |
 | `purpose` | text | required |  | Why the recipient may read the data (required). |
@@ -288,6 +303,7 @@ Ends a grant from `at` on. Supersedes the grant by reference; the grant itself i
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `grant_cid` | text (max 128) | required |  | CID of the revoked Grant. |
 | `at` | datetime (UTC) | required |  |  |
 | `reason` | text (max 200) | optional |  |  |
@@ -305,6 +321,7 @@ One simulated read under a grant: which records, when, how many simulated credit
 | `cid` | text (max 128) | auto |  |  |
 | `contributor` | FK -> Contributor | required |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 | `seq` | int >= 0 | required | >= 1 | 1, 2, ... per contributor. |
 | `at` | datetime (UTC) | required |  |  |
 | `grant_cid` | text (max 128) | required |  | CID of the Grant the read was made under. |
@@ -344,6 +361,7 @@ Append-only event: `new_cid` replaces `old_cid` as the current record.
 | `contributor` | FK -> Contributor | required |  |  |
 | `reason` | text (max 200) | optional |  |  |
 | `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
 
 ### ProbeBaseline
 

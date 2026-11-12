@@ -11,7 +11,7 @@ from backup import runner
 from core.models import Contributor
 from core.services.export import EXPORT_MODELS
 from ledger.models import AccessEvent
-from ledger.verify import verify
+from ledger.verify import head, verify
 from tests.test_export import seed
 from tests.test_ledger_export import seed_ledger
 
@@ -44,6 +44,26 @@ def test_set_counts_and_verifies_the_ledger(mike, tmp_path):
     assert {k: manifest["record_counts"][k] for k in ("grant", "revocation", "access_event")} == {
         "grant": 2, "revocation": 1, "access_event": 3}
     assert runner.verify_restore(folder, manifest, scratch="twin_verify_ledger") == 14 + 6
+    assert manifest["ledger_heads"]["mike"] == head(Contributor.objects.get(handle="mike"))
+    assert manifest["ledger_heads"]["mike"]["events"] == 3
+
+
+def test_a_manifest_head_that_does_not_match_the_export_fails(mike, tmp_path):
+    folder = tmp_path / "set"
+    manifest = runner.build_set(folder, now=NOW, include_inbox=False)
+    manifest["ledger_heads"]["mike"]["events"] = 2
+    with pytest.raises(runner.BackupError, match="ledger head of mike in the manifest does not match"):
+        runner.verify_restore(folder, manifest, scratch="twin_verify_head")
+    manifest["ledger_heads"]["mike"]["events"] = 3
+    manifest["ledger_heads"]["mike"]["revocations"] = 0  # review fix: grant/revocation counts are checked too
+    with pytest.raises(runner.BackupError, match="ledger head of mike in the manifest does not match"):
+        runner.verify_restore(folder, manifest, scratch="twin_verify_head2")
+    manifest["ledger_heads"]["mike"]["revocations"] = 1
+    manifest["ledger_heads"].pop("mike")  # every exported contributor needs a head
+    with pytest.raises(runner.BackupError, match="cover exactly the exported contributors"):
+        runner.verify_restore(folder, manifest, scratch="twin_verify_head3")
+    del manifest["ledger_heads"]  # sets from before M6 have no heads and still verify
+    assert runner.verify_restore(folder, manifest, scratch="twin_verify_nohead") == 14 + 6
 
 
 def test_sets_from_before_the_ledger_still_verify(mike, tmp_path):

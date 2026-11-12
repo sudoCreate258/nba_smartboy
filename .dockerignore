@@ -5,3 +5,9 @@ __pycache__
 .pytest_cache
 data/inbox
 .agents
+.planner
+certs
+backups
+backup-not-configured
+rclone.conf
+*.key

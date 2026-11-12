@@ -56,7 +56,7 @@ def test_score_equal_to_scale_max_is_fine(mike):
 
 def test_no_item_text_field():
     names = {f.name for f in WeeklyCheck._meta.fields}
-    assert names == {"id", "cid", "contributor", "created_at", "week_start", "instrument", "score", "scale_max", "notes"}
+    assert names == {"id", "cid", "contributor", "created_at", "created_seq", "week_start", "instrument", "score", "scale_max", "notes"}
 
 
 def test_admin_add_and_correction(admin_client, mike):

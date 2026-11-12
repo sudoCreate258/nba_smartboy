@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from core.models import DailySnapshot
+from core.models import IDENTITY_FIELDS, DailySnapshot
 from core.services.common import DISCLAIMER, STOP_TEXT
 from core.services.export import export_lines
 from core.services.records import save_record
@@ -32,7 +32,7 @@ from .trends import as_data as trends_data
 from .trends import build as trends_build
 
 RECENT_DAYS = 14
-_IDENTITY = {"id", "cid", "contributor", "created_at"}
+_IDENTITY = IDENTITY_FIELDS
 # Default "now" for the main time field of each kind.
 _NOW_FIELDS = {"probe": "started_at", "discomfort": "at", "reset": "at"}
 

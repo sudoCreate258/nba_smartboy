@@ -1,6 +1,6 @@
 # Architecture
 
-This describes what the code does today (after M5, the end of Nymbus phase 1). Items marked "planned" are not built.
+This describes what the code does today (after M6, the end of Nymbus phase 1). Items marked "planned" are not built.
 
 ## Components
 
@@ -19,6 +19,8 @@ This describes what the code does today (after M5, the end of Nymbus phase 1). I
 | Backup | `backup/` | Encrypted off-hours backup through an rclone crypt remote: dump, exports, manifest, verify in a scratch database, retention, restore (M4.5). |
 | Ledger | `ledger/`, `nymbus/ledger.py` | Grants, revocations and hash-chained access events; the only read path for simulated recipients; `verify_ledger`; deposit statement (M5). |
 | Database | PostgreSQL 16 (`docker-compose.yml`, volume `pgdata`) | The only live store. Ledger tables refuse UPDATE and DELETE (triggers). |
+| Security | `ui/security.py`, `twin/settings.py`, `scripts/scan.*`, `tools/scan_report.py`, `scripts/sign-image.ps1`, `scripts/lan-cert.*` | CSP and security headers, HTTPS mode, vulnerability gate (osv-scanner from Alpine 3.20), image signing (cosign), the owner's local CA for LAN HTTPS (M6). |
+| Porting contract | `docs/PORTING.md`, `tools/porting_vectors.py` | Record format, CID, corrections, ledger chain, export and statement formats, with test vectors (M6). |
 | Local CI gate | `scripts/ci-local.ps1`, `scripts/ci-local.sh`, `scripts/pre-push` | `pytest`, `makemigrations --check` and a JavaScript syntax check in Docker; the pre-push hook refuses a push unless they pass. GitHub Actions (`.github/workflows/ci.yml`) runs the same checks as a second gate. |
 
 ## Data flow
@@ -53,9 +55,9 @@ simulated recipient -> ledger.service.simulated_read
 
 ## Trust boundaries
 
-- **Network:** the web port is bound to `127.0.0.1:8000` unless LAN mode is switched on (plain HTTP; HTTPS planned (M6)). The app makes no outbound requests; the backup talks only to the rclone remote the owner configured.
+- **Network:** the web port is bound to `127.0.0.1:8000` unless LAN mode is switched on (plain HTTP). LAN HTTPS (M6): an opt-in TLS server on `TWIN_HTTPS_HOST:8443` with a certificate from the owner's local CA, secure cookies and HSTS. The app makes no outbound requests; the backup talks only to the rclone remote the owner configured.
 - **Configuration:** settings come from `.env` (gitignored). `DJANGO_SECRET_KEY` is required unless `DJANGO_DEBUG=1`; Compose refuses to start without `POSTGRES_PASSWORD`.
 - **Access:** one login per instance, rate-limited; the app acts as the single contributor `TWIN_CONTRIBUTOR`.
 - **Repository:** public. Test fixtures are synthetic. Real exports stay in `data/inbox/` (gitignored). The CI token is read-only.
-- **Immutability:** records are immutable in the model layer; ledger tables also in the database (triggers). The database owner can still TRUNCATE or DROP; record tables have no trigger yet (planned (M6)).
-- **Not yet:** encryption at rest on the local disk (the owner's disk encryption), HTTPS for LAN mode (M6).
+- **Immutability:** records, Supersession and the ledger are immutable in the model layer and in the database (row triggers refuse UPDATE and DELETE, M6). The database owner can still TRUNCATE, DROP or switch a trigger off; the CID checks and `verify_ledger` show such edits.
+- **Not yet:** encryption at rest on the local disk (the owner's disk encryption), multi-arch (ARM) images (deferred, see DECISIONS).

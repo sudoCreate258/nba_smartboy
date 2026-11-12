@@ -139,16 +139,30 @@ The app works without JavaScript. With it, check-ins you make while the instance
 
 Installing to the home screen and opening viewed pages offline need a service worker, which browsers only allow on `https://` or on `localhost`. So:
 - **On this computer** (`http://localhost:8000/`): install and offline pages work.
-- **On a phone in LAN mode** (plain `http://<address>:8000/`): the offline check-in queue works, but the browser will not install the app or keep pages offline. That arrives with HTTPS in M6.
+- **On a phone in LAN mode** (plain `http://<address>:8000/`): the offline check-in queue works, but the browser will not install the app or keep pages offline.
+- **On a phone with LAN HTTPS** (`https://<address>:8443/`, below): everything works, install and offline pages included.
 
 Logging out deletes the pages saved on the device. Check-ins not yet sent stay on the device and are sent after the next login. A manual phone checklist is in `docs/OPERATIONS.md`.
 
 **Debug:** `DJANGO_DEBUG=1` is for local development only (detailed error pages). Normal use is `DJANGO_DEBUG=0`, which needs a `DJANGO_SECRET_KEY`; `.env.example` shows how to generate one.
 
 **LAN mode (phone on your home Wi-Fi):** off by default; the app only listens on this computer. To open it from a phone on the same network, set `TWIN_LAN_HOST` in `.env` to this computer's address (for example `192.168.1.20`, from `ipconfig`), then `docker compose up -d` and open `http://192.168.1.20:8000/` on the phone.
-- Use LAN mode only on a trusted home network, never on shared or public Wi-Fi: it is plain HTTP until HTTPS arrives (M6).
+- Use LAN mode only on a trusted home network, never on shared or public Wi-Fi: it is plain HTTP. Prefer LAN HTTPS.
 - LAN mode refuses to start while `DJANGO_DEBUG=1`.
 - Logins are rate-limited (5 failed attempts per username or address, then a 15-minute wait).
+
+**LAN HTTPS (recommended for the phone):** you create a small certificate authority (CA) of your own, the phone trusts it, and the twin serves `https://<address>:8443/` with a certificate from it. The CA's private key stays on this computer.
+1. Create the CA and the server certificate (once; again only if the address changes):
+   `powershell -File scripts/lan-cert.ps1 -LanHost 192.168.1.20`
+   The CA goes to `%USERPROFILE%\.twin-ca` (outside the repository, so no container can read it; `-CaDir` picks another folder outside it), the server certificate to `certs/server/` (gitignored, never in the image, mounted read-only into the HTTPS service only). It prints the CA's SHA-256 fingerprint. Keep `ca.key` private; never send it anywhere.
+2. In `.env`: leave `TWIN_LAN_HOST` empty (the plain port stays on this computer) and set `TWIN_HTTPS_HOST=192.168.1.20`. Start it: `docker compose --profile https up -d web-https`.
+3. Copy **only** `twin-ca.crt` from the CA folder to the phone (USB, or an email to yourself) and trust it:
+   - **Android:** Settings > Security (or "Security & privacy") > More > Encryption & credentials > Install a certificate > CA certificate, pick `twin-ca.crt`. Chrome then trusts the twin.
+   - **iPhone/iPad:** open `twin-ca.crt` (Files or Mail) > Settings > General > VPN & Device Management > install the profile; then Settings > General > About > Certificate Trust Settings > turn on full trust for "Twin local CA".
+   Check that the fingerprint shown on the phone matches the one the script printed.
+4. Open `https://192.168.1.20:8443/` on the phone, log in, and "Add to Home screen".
+- The HTTPS server sends HSTS for a year: once the phone has seen it, it will only use HTTPS for that address. To go back to plain LAN mode, clear the browser's site data for the address.
+- To stop trusting it: remove the certificate on the phone and delete the CA folder and `certs/`.
 
 ## Stop
 

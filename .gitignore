@@ -14,3 +14,8 @@ backups/
 rclone.conf
 *.rclone.conf
 backup-not-configured/
+# LAN HTTPS (M6): the owner's local CA and server keys, and cosign keys.
+certs/
+*.key
+cosign.key
+dist/

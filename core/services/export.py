@@ -25,7 +25,7 @@ from nymbus.provenance import canonical_bytes, compute_cid, normalize_fields
 
 from ledger.models import AccessEvent, Grant, Revocation
 
-from ..models import (Contributor, DailySnapshot, DiscomfortCheck, ProbeSession, ProvenancedRecord, Reset,
+from ..models import (IDENTITY_FIELDS, Contributor, DailySnapshot, DiscomfortCheck, ProbeSession, ProvenancedRecord, Reset,
                       Supersession, TrainingSession, TrainingSet, WeeklyCheck, WorkBlock)
 
 FORMAT, VERSION = "nymbus-jsonl", 1
@@ -48,14 +48,13 @@ def export_lines(contributor, now=None):
     """Yield the export as JSON strings (one per line, no newline)."""
     yield json.dumps({"type": "export", "format": FORMAT, "version": VERSION, "contributor": contributor.handle,
                       "timezone": contributor.timezone, "exported_at": _iso(now or timezone.now())}, sort_keys=True)
-    events = []
-    for model in EXPORT_MODELS:
-        for r in model.objects.filter(contributor=contributor):
-            events.append((r.created_at, 0, r.pk, model.record_kind, r))
-    for s in Supersession.objects.filter(contributor=contributor):
-        events.append((s.created_at, 1, s.pk, "", s))
-    events.sort(key=lambda e: e[:4])
-    for _, _, _, kind, obj in events:
+    # Creation order from the shared database sequence (M6), not the wall clock: a host clock that
+    # steps back would otherwise put a correction before the record it points to.
+    events = [r for model in RECORD_MODELS for r in model.objects.filter(contributor=contributor)]
+    events += list(Supersession.objects.filter(contributor=contributor))
+    events.sort(key=lambda obj: obj.created_seq)
+    for obj in events + _ledger_in_replay_order(contributor):
+        kind = obj.record_kind if isinstance(obj, ProvenancedRecord) else ""
         if isinstance(obj, ProvenancedRecord):
             yield json.dumps({"type": "record", "kind": kind, "cid": obj.cid, "contributor": contributor.handle,
                               "fields": normalize_fields(obj.domain_fields()), "created_at": _iso(obj.created_at)},
@@ -63,6 +62,23 @@ def export_lines(contributor, now=None):
         else:
             yield json.dumps({"type": "supersession", "old_cid": obj.old_cid, "new_cid": obj.new_cid,
                               "reason": obj.reason, "created_at": _iso(obj.created_at)}, sort_keys=True)
+
+
+def _ledger_in_replay_order(contributor):
+    """Ledger records in an order that replays exactly as they were validated, independent of
+    `created_at` (a host clock that steps back must not reorder the file): access events by seq;
+    before each event, every grant and revocation whose own time (start / at) is not after the
+    event's time; at equal times a revocation comes before a grant (a new grant may start the
+    instant the old one is revoked). The rest follows the last event."""
+    pending = sorted([(g.start, 1, g.pk, g) for g in Grant.objects.filter(contributor=contributor)]
+                     + [(r.at, 0, r.pk, r) for r in Revocation.objects.filter(contributor=contributor)],
+                     key=lambda item: item[:3])
+    out = []
+    for event in AccessEvent.objects.filter(contributor=contributor).order_by("seq"):
+        while pending and pending[0][0] <= event.at:
+            out.append(pending.pop(0)[3])
+        out.append(event)
+    return out + [item[3] for item in pending]
 
 
 def verify_line(item):
@@ -181,7 +197,7 @@ def _import_record(number, item, contributor, replaces):
     if not verify_line(item):
         raise ImportError_(f"line {number}: CID does not match the line's content")
     record = model(contributor=contributor)
-    content = {f.name: f for f in model._meta.concrete_fields if f.name not in ("id", "cid", "contributor", "created_at")}
+    content = {f.name: f for f in model._meta.concrete_fields if f.name not in IDENTITY_FIELDS}
     for name, value in item["fields"].items():
         field = content.get(name)
         if field is None:
