@@ -12,8 +12,16 @@ $dirty = if ($LASTEXITCODE -ne 0) { " (with uncommitted changes)" } else { "" }
 Write-Output "Local CI gate on $commit$dirty"
 
 $ErrorActionPreference = "Continue"
-$out = docker compose run --rm -T web sh -c "pytest -q -p no:cacheprovider && python manage.py makemigrations --check --dry-run && python manage.py render_service_worker --out .agents/sw-rendered.js" 2>&1 | ForEach-Object { "$_" }
+$out = docker compose run --rm -T web sh -c "pytest -q -rf -p no:cacheprovider && python manage.py makemigrations --check --dry-run && python manage.py render_service_worker --out .agents/sw-rendered.js" 2>&1 | ForEach-Object { "$_" }
 $status = $LASTEXITCODE
+# Keep the names of failed tests (only the summary goes to ci-local-last.txt), so a flaky failure can be traced.
+$failed = @($out | Select-String -Pattern "^FAILED " | ForEach-Object { $_.Line })
+if ($failed.Count -gt 0) {
+    New-Item -ItemType Directory -Force .agents | Out-Null
+    [System.IO.File]::AppendAllText((Join-Path (Get-Location) ".agents/ci-local-failures.txt"),
+        "$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) ${commit}:`n" + ($failed -join "`n") + "`n")
+    $failed | Write-Output
+}
 if ($status -eq 0) {
     # JavaScript syntax (official node image; the scripts are not run in a browser here).
     $root = (Get-Location).Path
