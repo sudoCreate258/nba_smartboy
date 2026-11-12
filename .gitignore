@@ -11,3 +11,6 @@ data/inbox/*
 .agents/
 .planner/
 backups/
+rclone.conf
+*.rclone.conf
+backup-not-configured/

@@ -35,6 +35,9 @@
     <dd><span class="flag flag-{{ t.zone.flag|slugify }}">{{ t.zone.flag }}</span> <span class="why">{{ t.zone.detail }}</span></dd>
     {% endif %}
     {% if not t.probes and not t.zone %}<dd class="note">No flag modules are on. <a href="{% url 'ui:modules' %}">Modules</a></dd>{% endif %}
+    <dt>Backup</dt>
+    <dd><span class="flag flag-{{ t.backup.level|slugify }}">{% if t.backup.level == "not_set_up" %}not set up{% elif t.backup.level == "ok" %}ok{% else %}{{ t.backup.level }}{% endif %}</span>
+      <span class="why">{{ t.backup.detail }}{% if t.backup.last_ok_at %} {{ t.backup.last_ok_at|date:"D j M H:i" }}{% if t.backup.size_bytes %}, {{ t.backup.size_bytes|filesizeformat }}{% endif %}.{% endif %}</span></dd>
   </dl>
 </section>
 {% endblock %}
