@@ -1,0 +1,31 @@
+{% extends "ui/base.html" %}
+{% block title %}Statement {{ s.month }} - Twin{% endblock %}
+{% block content %}
+<h1>Statement {{ s.month }}</h1>
+<p class="note">Who read which category of your data this month, for what purpose. Units are {{ unit }}: a simulation, not money. Only simulated recipients exist in this version.</p>
+{% if s.months %}
+<nav aria-label="Months"><p>{% for m in s.months %}<a href="?month={{ m }}"{% if m == s.month %} aria-current="page"{% endif %}>{{ m }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p></nav>
+{% endif %}
+{% if rows %}
+<div class="table-wrap">
+<table>
+  <caption>Reads in {{ s.month }} ({{ s.timezone }})</caption>
+  <thead><tr><th scope="col">Category</th><th scope="col">Recipient</th><th scope="col">Purpose</th><th scope="col">Reads</th><th scope="col">Records accessed</th><th scope="col">Distinct records</th><th scope="col">{{ unit|capfirst }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}<tr><td>{{ r.category_label }}</td><td>{{ r.recipient_label }}</td><td>{{ r.purpose }}</td><td>{{ r.reads }}</td><td>{{ r.records_accessed }}</td><td>{{ r.distinct_records }}</td><td>{{ r.units }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<h2>Totals per category</h2>
+<ul>
+{% for t in totals %}<li>{{ t.category_label }}: {{ t.reads }} reads, {{ t.records_accessed }} records accessed, {{ t.units }} {{ unit }}</li>
+{% endfor %}
+</ul>
+<p><strong>Total: {{ s.units_total }} {{ unit }}</strong></p>
+{% else %}
+<p>No reads in {{ s.month }}.</p>
+{% endif %}
+<p class="note">Statement CID: <code class="cid">{{ s.cid }}</code></p>
+<p><a class="button" href="{% url 'ui:statement_download' %}?month={{ s.month }}">Download statement (JSON Lines)</a></p>
+{% endblock %}

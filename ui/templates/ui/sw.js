@@ -10,7 +10,7 @@
 var CACHE = "twin-{{ version }}";
 var SHELL = [{% for url in shell %}"{{ url|escapejs }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
 var OFFLINE = "{{ offline_url|escapejs }}";
-var NEVER = ["/admin/", "/api/", "/my-data/", "/csrf-token/", "/logout/", "/sw.js"];
+var NEVER = ["/admin/", "/api/", "/my-data/", "/csrf-token/", "/logout/", "/sw.js", "/permissions/", "/statement/"];
 
 function never(path) {
   return NEVER.some(function (prefix) { return path.indexOf(prefix) === 0; });
