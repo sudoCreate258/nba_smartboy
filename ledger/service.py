@@ -77,7 +77,7 @@ def category_records(contributor, category):
     """Current records of a category's kinds, oldest first within each kind."""
     out = []
     for kind in kinds_of(category):
-        out += list(BY_KIND[kind].objects.current().filter(contributor=contributor).order_by("created_at", "id"))
+        out += list(BY_KIND[kind].objects.current().filter(contributor=contributor).order_by("created_seq"))
     return out
 
 

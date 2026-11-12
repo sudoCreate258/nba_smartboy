@@ -5,14 +5,14 @@ from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from core.models import Contributor, DailySnapshot
+from core.models import IDENTITY_FIELDS, Contributor, DailySnapshot
 from core.services import CREATED, SKIPPED, SUPERSEDED, record_snapshot
 from core.services.common import describe, localize
 
 ALLOWED_KEYS = {
     f.name
     for f in DailySnapshot._meta.concrete_fields
-    if not f.primary_key and f.name not in {"cid", "contributor", "created_at"}
+    if not f.primary_key and f.name not in IDENTITY_FIELDS
 }
 REQUIRED_KEYS = {"date", "source"}
 DATETIME_KEYS = {

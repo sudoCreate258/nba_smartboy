@@ -25,7 +25,7 @@ from nymbus.provenance import canonical_bytes, compute_cid, normalize_fields
 
 from ledger.models import AccessEvent, Grant, Revocation
 
-from ..models import (Contributor, DailySnapshot, DiscomfortCheck, ProbeSession, ProvenancedRecord, Reset,
+from ..models import (IDENTITY_FIELDS, Contributor, DailySnapshot, DiscomfortCheck, ProbeSession, ProvenancedRecord, Reset,
                       Supersession, TrainingSession, TrainingSet, WeeklyCheck, WorkBlock)
 
 FORMAT, VERSION = "nymbus-jsonl", 1
@@ -48,14 +48,12 @@ def export_lines(contributor, now=None):
     """Yield the export as JSON strings (one per line, no newline)."""
     yield json.dumps({"type": "export", "format": FORMAT, "version": VERSION, "contributor": contributor.handle,
                       "timezone": contributor.timezone, "exported_at": _iso(now or timezone.now())}, sort_keys=True)
-    events = []
-    for model in RECORD_MODELS:
-        for r in model.objects.filter(contributor=contributor):
-            events.append((r.created_at, 0, r.pk, model.record_kind, r))
-    for s in Supersession.objects.filter(contributor=contributor):
-        events.append((s.created_at, 1, s.pk, "", s))
-    events.sort(key=lambda e: e[:4])
-    for obj in [e[4] for e in events] + _ledger_in_replay_order(contributor):
+    # Creation order from the shared database sequence (M6), not the wall clock: a host clock that
+    # steps back would otherwise put a correction before the record it points to.
+    events = [r for model in RECORD_MODELS for r in model.objects.filter(contributor=contributor)]
+    events += list(Supersession.objects.filter(contributor=contributor))
+    events.sort(key=lambda obj: obj.created_seq)
+    for obj in events + _ledger_in_replay_order(contributor):
         kind = obj.record_kind if isinstance(obj, ProvenancedRecord) else ""
         if isinstance(obj, ProvenancedRecord):
             yield json.dumps({"type": "record", "kind": kind, "cid": obj.cid, "contributor": contributor.handle,
@@ -199,7 +197,7 @@ def _import_record(number, item, contributor, replaces):
     if not verify_line(item):
         raise ImportError_(f"line {number}: CID does not match the line's content")
     record = model(contributor=contributor)
-    content = {f.name: f for f in model._meta.concrete_fields if f.name not in ("id", "cid", "contributor", "created_at")}
+    content = {f.name: f for f in model._meta.concrete_fields if f.name not in IDENTITY_FIELDS}
     for name, value in item["fields"].items():
         field = content.get(name)
         if field is None:

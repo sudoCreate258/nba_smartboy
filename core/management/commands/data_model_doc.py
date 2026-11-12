@@ -115,7 +115,9 @@ skipped by a daylight-saving change are rejected on import.
 ## Export format (nymbus-jsonl, version 1)
 
 First draft of the Nymbus interchange contract. `manage.py export_my_data` and the app's
-"Download my data" write one JSON object per line (UTF-8), in the order things were created:
+"Download my data" write one JSON object per line (UTF-8), in the order things were created
+(`created_seq`, one database sequence shared by every record table, Supersession and the ledger,
+so a host clock that steps back cannot reorder a correction before its record):
 
 - Line 1: `{"type": "export", "format": "nymbus-jsonl", "version": 1, "contributor": <handle>,
   "timezone": <IANA zone>, "exported_at": <UTC ISO>}`
@@ -177,7 +179,7 @@ def _bounds(field):
 
 
 def _required(field):
-    if field.primary_key or field.name in {"cid", "created_at"}:
+    if field.primary_key or field.name in {"cid", "created_at", "created_seq"}:
         return "auto"
     if isinstance(field, models.BooleanField) or field.has_default():
         return f"default `{field.get_default()}`" if not callable(field.default) else "default now"
