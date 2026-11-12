@@ -122,6 +122,13 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 # Login rate limit: after this many failed attempts for one username or one address,
 # further attempts are refused for the window (ui/views.py, LoginView).
+# Encrypted off-hours backup (M4.5). The rclone config path comes from RCLONE_CONFIG (set by the
+# backup service from RCLONE_CONFIG_HOST); BACKUP_REMOTE names the crypt remote, e.g. "twin-crypt:".
+BACKUP_REMOTE = os.environ.get("BACKUP_REMOTE", "").strip()
+BACKUP_WINDOW = os.environ.get("BACKUP_WINDOW", "02:00-05:00")
+BACKUP_INCLUDE_INBOX = os.environ.get("BACKUP_INCLUDE_INBOX", "0") == "1"
+BACKUP_INBOX_DIR = BASE_DIR / "data" / "inbox"
+TWIN_VERSION = "0.4.0"  # app version recorded in backup manifests
 TWIN_LOGIN_MAX_FAILURES = 5
 TWIN_LOGIN_WINDOW_SECONDS = 15 * 60
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

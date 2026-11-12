@@ -29,5 +29,25 @@ services:
       db:
         condition: service_healthy
 
+  # Encrypted off-hours backup (M4.5), opt-in: `docker compose --profile backup up -d backup`.
+  # The rclone config (with the crypt remote) stays outside the repository and is mounted
+  # read-only into this service only; set RCLONE_CONFIG_HOST in .env (see docs/OPERATIONS.md).
+  backup:
+    build: .
+    profiles: ["backup"]
+    command: python manage.py backup_loop
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      RCLONE_CONFIG: /run/secrets/rclone.conf
+    volumes:
+      - .:/app
+      - ${RCLONE_CONFIG_HOST:-./backup-not-configured/rclone.conf}:/run/secrets/rclone.conf:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
