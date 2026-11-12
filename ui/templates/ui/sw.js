@@ -6,7 +6,7 @@
    copies are deleted (offline.js posts "purge-pages"). Check-ins made offline are
    queued by offline.js (IndexedDB), not here.
    Browsers only run service workers on secure (HTTPS) origins or on localhost, so in
-   LAN mode (plain HTTP) this file is not used until HTTPS arrives in M6. */
+   plain-HTTP LAN mode this file is not used; with LAN HTTPS (M6) it is. */
 var CACHE = "twin-{{ version }}";
 var SHELL = [{% for url in shell %}"{{ url|escapejs }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
 var OFFLINE = "{{ offline_url|escapejs }}";

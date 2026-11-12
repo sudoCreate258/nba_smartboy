@@ -70,7 +70,8 @@ The test suite checks the server side of the phone app and that the scripts pars
 4. Repeat step 3, then log out and log in again before restarting the instance: the queued check-in is still sent once (fresh CSRF token).
 5. Queue a correction of a record, correct the same record online, then let the queue send: the queued item is listed as "could not be saved: ... already corrected" and later items still send.
 6. On `http://localhost:8000/` only: install to the home screen, view Trends, go offline, reopen Trends (cached copy), log out, go offline again: Trends is no longer available offline.
-7. In LAN mode (`http://<address>:8000/` on the phone): steps 1-5 work; install and offline pages are not offered (plain HTTP; HTTPS is M6).
+7. In LAN mode (`http://<address>:8000/` on the phone): steps 1-5 work; install and offline pages are not offered (plain HTTP).
+8. With LAN HTTPS (`https://<address>:8443/`, CA trusted on the phone, README): steps 1-6 work on the phone, install and offline pages included.
 
 ## Encrypted backup
 

@@ -1,6 +1,6 @@
 # Architecture
 
-This describes what the code does today (after M5, the end of Nymbus phase 1). Items marked "planned" are not built.
+This describes what the code does today (after M6, the end of Nymbus phase 1). Items marked "planned" are not built.
 
 ## Components
 
@@ -53,9 +53,9 @@ simulated recipient -> ledger.service.simulated_read
 
 ## Trust boundaries
 
-- **Network:** the web port is bound to `127.0.0.1:8000` unless LAN mode is switched on (plain HTTP; HTTPS planned (M6)). The app makes no outbound requests; the backup talks only to the rclone remote the owner configured.
+- **Network:** the web port is bound to `127.0.0.1:8000` unless LAN mode is switched on (plain HTTP). LAN HTTPS (M6): an opt-in TLS server on `TWIN_HTTPS_HOST:8443` with a certificate from the owner's local CA, secure cookies and HSTS. The app makes no outbound requests; the backup talks only to the rclone remote the owner configured.
 - **Configuration:** settings come from `.env` (gitignored). `DJANGO_SECRET_KEY` is required unless `DJANGO_DEBUG=1`; Compose refuses to start without `POSTGRES_PASSWORD`.
 - **Access:** one login per instance, rate-limited; the app acts as the single contributor `TWIN_CONTRIBUTOR`.
 - **Repository:** public. Test fixtures are synthetic. Real exports stay in `data/inbox/` (gitignored). The CI token is read-only.
 - **Immutability:** records, Supersession and the ledger are immutable in the model layer and in the database (row triggers refuse UPDATE and DELETE, M6). The database owner can still TRUNCATE, DROP or switch a trigger off; the CID checks and `verify_ledger` show such edits.
-- **Not yet:** encryption at rest on the local disk (the owner's disk encryption), HTTPS for LAN mode (M6).
+- **Not yet:** encryption at rest on the local disk (the owner's disk encryption), multi-arch (ARM) images (deferred, see DECISIONS).
