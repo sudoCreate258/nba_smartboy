@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from backup import schedule
 from backup.models import BackupRun
-from backup.runner import _tz, run_backup
+from backup.runner import _tz, recover_interrupted, run_backup
 
 from .backup_now import describe
 
@@ -19,8 +19,15 @@ def check_once(now=None):
     """Run the nightly backup if it is due. Returns (ran: bool, message)."""
     now = now or timezone.now()
     window = schedule.parse_window(settings.BACKUP_WINDOW)
-    last = BackupRun.objects.order_by("-started_at").values_list("started_at", flat=True).first()
-    due, reason = schedule.is_due(now, last, window, _tz())
+    recover_interrupted(now)  # an attempt that never finished must not use up the night
+    tz = _tz()
+    counted = BackupRun.objects.exclude(status=BackupRun.Status.FAILED, error__startswith="Interrupted")
+    latest = counted.order_by("-started_at").first()
+    begin = schedule.night_start(now, window, tz)
+    failures = counted.filter(status=BackupRun.Status.FAILED, started_at__gte=begin).count()
+    due, reason = schedule.is_due(now, latest.started_at if latest else None, window, tz,
+                                  failures_tonight=failures,
+                                  last_failed=bool(latest and latest.status == BackupRun.Status.FAILED))
     if not due:
         return False, reason
     run = run_backup(BackupRun.Trigger.NIGHTLY, now=now)

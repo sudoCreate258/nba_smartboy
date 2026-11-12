@@ -82,8 +82,12 @@ def test_inbox_is_opt_in(mike, remote, tmp_path, settings):
     (inbox / ".gitkeep").write_text("", encoding="utf-8")
     settings.BACKUP_INBOX_DIR = inbox
     run = runner.run_backup(now=NOW, remote=name, config=config, include_inbox=True)
-    assert run.status == "ok", run.error and run.manifest["includes_inbox"]
+    assert run.status == "ok", run.error
+    assert run.manifest["includes_inbox"] is True
     assert "inbox.tar.gz" in {f["name"] for f in run.manifest["files"]}
+    without = runner.run_backup(now=NOW + datetime.timedelta(days=1), remote=name, config=config, include_inbox=False)
+    assert without.status == "ok" and without.manifest["includes_inbox"] is False
+    assert "inbox.tar.gz" not in {f["name"] for f in without.manifest["files"]}
 
 
 def test_manifest_hash_mismatch_is_detected(tmp_path, mike):

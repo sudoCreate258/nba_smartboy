@@ -16,7 +16,7 @@ def run(hours_ago, status="ok", uploaded=True, error=""):
     t = NOW - datetime.timedelta(hours=hours_ago)
     return BackupRun.objects.create(started_at=t, finished_at=t, trigger="nightly", status=status,
                                     set_name=t.strftime("%Y-%m-%dT%H%M%SZ"), size_bytes=2_500_000,
-                                    uploaded=uploaded, verified=status == "ok", error=error)
+                                    uploaded=uploaded, verified=status == "ok", published=status == "ok", error=error)
 
 
 @pytest.mark.django_db
@@ -62,7 +62,7 @@ def test_home_and_api_show_backup_status(client_in, settings):
     settings.BACKUP_REMOTE = "vault:"
     BackupRun.objects.create(started_at=datetime.datetime.now(UTC), finished_at=datetime.datetime.now(UTC),
                              trigger="manual", status="ok", set_name="x", size_bytes=2_500_000, uploaded=True,
-                             verified=True)
+                             verified=True, published=True)
     html = client_in.get(reverse("ui:home")).content.decode()
     assert "Backup" in html and "flag-ok" in html and "Last backup 0 h ago, verified." in html and "2.4" in html
     api = client_in.get(reverse("ui:api_today")).json()["today"]["backup"]

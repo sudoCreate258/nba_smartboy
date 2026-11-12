@@ -52,16 +52,18 @@ def test_restore_latest_from_the_remote(backed_up):
     lose_everything()
     assert state() != backed_up
     out = StringIO()
-    call_command("restore_backup", "--set", "latest", stdout=out)
+    call_command("restore_backup", "--set", "latest", "--yes", stdout=out)  # other tables still hold data
     text = out.getvalue()
-    assert "Downloaded 2026-11-12T073000Z through the crypt remote." in text
+    assert "Downloaded 2026-11-12T073000Z (a verified set) through the crypt remote." in text
+    assert "Checked in a scratch database first: 14 records and all corrections match the export." in text
     assert "Restored 14 records; every CID matches the export." in text
     assert state() == backed_up
 
 
-def test_restore_refuses_to_replace_records_without_yes(backed_up):
-    with pytest.raises(CommandError, match="already has 14 records"):
+def test_restore_refuses_to_replace_data_without_yes(backed_up):
+    with pytest.raises(CommandError, match="already has data .*core_contributor"):
         call_command("restore_backup", "--set", "latest", stdout=StringIO())
+    assert state() == backed_up  # nothing was touched
     call_command("restore_backup", "--set", "latest", "--yes", stdout=StringIO())
     assert state() == backed_up
 

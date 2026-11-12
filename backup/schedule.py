@@ -47,10 +47,22 @@ def in_window(now, window, tz):
     return now < _at(end_day, end, tz)
 
 
-def is_due(now, last_attempt, window, tz):
-    """(due, reason). `last_attempt` is the start of the latest backup attempt (aware) or None."""
+MAX_ATTEMPTS = 3  # a night: the first run plus up to two retries after a failure
+RETRY_AFTER = datetime.timedelta(minutes=20)
+
+
+def is_due(now, last_attempt, window, tz, failures_tonight=0, last_failed=False):
+    """(due, reason). `last_attempt` is the start of the latest backup attempt (aware) or None.
+
+    A successful (or still-running) attempt ends the night. A FAILED attempt may be retried inside the window,
+    at most MAX_ATTEMPTS attempts per night, RETRY_AFTER apart, so a short outage does not cost a whole night
+    while a broken setup is still not hammered.
+    """
     begin = night_start(now, window, tz)
     if last_attempt is not None and last_attempt >= begin:
+        if (last_failed and in_window(now, window, tz) and failures_tonight < MAX_ATTEMPTS
+                and now - last_attempt >= RETRY_AFTER):
+            return True, f"retry {failures_tonight + 1} of {MAX_ATTEMPTS - 1} after a failed attempt"
         return False, "already ran this night"
     if in_window(now, window, tz):
         return True, "inside the backup window"

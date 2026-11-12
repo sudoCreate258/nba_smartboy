@@ -8,9 +8,9 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-# Never part of the repository content (gitignored or generated).
+# Never part of the repository content (gitignored or generated). `.kiro` is tracked, so it IS scanned.
 SKIP_DIRS = {".git", ".agents", ".planner", ".pytest_cache", "__pycache__", "staticfiles", "backups",
-             "backup-not-configured", ".kiro"}
+             "backup-not-configured"}
 SECRET_PATTERNS = [
     re.compile(r"(?m)^\s*type\s*=\s*crypt\s*$"),                        # an rclone crypt remote section
     re.compile(r"(?m)^\s*password2?\s*=\s*\S{8,}"),                     # rclone (obscured) crypt password / salt
@@ -49,6 +49,14 @@ def test_gitignore_covers_rclone_config_and_backups():
 def test_the_hygiene_check_catches_a_crypt_config():
     sample = "[twin-crypt]\ntype = crypt\nremote = gdrive:twin\npassword = abcdefghijklmnop\n"
     assert any(p.search(sample) for p in SECRET_PATTERNS)
+
+
+def test_the_scan_covers_the_specification_files():
+    """Review: a secret pasted into a tracked spec must fail the gate, so .kiro must be scanned."""
+    scanned = {p.relative_to(ROOT).parts[0] for p in repo_files()}
+    assert ".kiro" in scanned and "docs" in scanned and "tests" in scanned
+    spec = ROOT / ".kiro" / "specs" / "m4-5-encrypted-backup" / "requirements.md"
+    assert spec in set(repo_files())
 
 
 def test_backup_service_is_an_opt_in_profile_with_a_read_only_config():

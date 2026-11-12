@@ -22,7 +22,9 @@ class BackupRun(models.Model):
     size_bytes = models.BigIntegerField(null=True, blank=True)
     uploaded = models.BooleanField(default=False)
     verified = models.BooleanField(default=False)
+    published = models.BooleanField(default=False, help_text="Moved from staging to the verified sets.")
     pruned = models.JSONField(default=list, blank=True)
+    prune_error = models.TextField(blank=True, help_text="Deleting old sets failed; the new set is still good.")
     manifest = models.JSONField(null=True, blank=True)
     error = models.TextField(blank=True)
 

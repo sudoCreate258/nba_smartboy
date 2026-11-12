@@ -83,20 +83,22 @@ rclone runs OAuth and holds the key, so set it up yourself. Install rclone (http
 
 Back up on demand: `docker compose run --rm backup python manage.py backup_now`. Today (and `/api/v0/today`) show the last backup time, size and verify result.
 
-Each run uploads a set (database dump, your data export, a manifest), then verifies it by downloading it again, checking SHA-256, restoring the dump into a scratch database and confirming every CID matches the export. It keeps the last 7 daily and 4 weekly sets, deleting older ones only after the new set verifies. `data/inbox/` is not backed up unless `BACKUP_INCLUDE_INBOX=1`.
+Each run uploads a set (database dump, your data export, a manifest) into a `staging/` area, then verifies it by downloading it again, checking SHA-256, restoring the dump into a scratch database and confirming every record and correction matches the export. Only a verified set is moved to `sets/`; `latest` and retention only ever look there, so a set that failed verification can never be restored by mistake or push a good set out. The dump and the export are taken from one database snapshot, so they agree even while the app is in use. It keeps the last 7 daily and 4 weekly sets, deleting older ones only after the new set is published. `data/inbox/` is not backed up unless `BACKUP_INCLUDE_INBOX=1`.
+
+**The backup refuses any remote that is not an rclone `crypt` remote** (an alias that leads to one is fine), so a mistake in `BACKUP_REMOTE` stops the run before anything is built instead of uploading readable files. Today shows red with the reason if a run fails or is interrupted (machine off, restart); an interrupted night is retried automatically.
 
 ### Restore onto a fresh machine
 
 1. Set up the twin (First setup above) and the same `twin-crypt` remote with the same password and salt, in `.env`.
-2. `docker compose up -d --build` and `docker compose exec web python manage.py migrate` (an empty database).
-3. Restore the latest set:
+2. Start only the database and migrate an empty one: `docker compose up -d db`, then `docker compose run --rm web python manage.py migrate`.
+3. Restore the latest verified set (the web and backup services are not running, so nothing writes while it is replaced):
 
    ```powershell
-   docker compose run --rm backup python manage.py restore_backup --set latest --yes
+   docker compose run --rm backup python manage.py restore_backup --set latest
    ```
 
-   It downloads and decrypts the set, checks the hashes, restores the dump over the database, and confirms every record's CID matches the export. Then `docker compose exec web python manage.py migrate` (a no-op when the code matches the backup).
-4. Check: `docker compose exec web python manage.py probe_report` runs and the records are there.
+   An empty, freshly migrated database needs no confirmation. To replace a database that already holds data (a machine you are repairing, not a fresh one), stop `web` and `backup` first and add `--yes`; the command lists what it would replace and refuses without it. It downloads and decrypts the set, checks the hashes, **proves the set in a scratch database first** (every record and correction must match the export), and only then replaces the database, in a single transaction (all or nothing). It then compares the restored database with the export once more. Restoring replaces everything in the database, including users and settings; the command asks for `--yes` when the target already holds data. Then `docker compose run --rm web python manage.py migrate` (a no-op when the code matches the backup).
+4. Start everything: `docker compose up -d`. Check: `docker compose exec web python manage.py probe_report` runs and the records are there.
 
 To restore a specific set, use its name (from `docker compose run --rm backup rclone --config /run/secrets/rclone.conf lsf twin-crypt:sets/`) instead of `latest`.
 
