@@ -205,7 +205,7 @@ Choices the spec left open. Owner or planner may overrule.
 - Storage direction: Nymbus phase 2 says central storage under HIPAA-style controls; the owner also wants small, user-run instances with client-side encrypted group backups. Resolve in the Nymbus doc before phase 2.
 - Payout: the Nymbus doc says contributors get paid in cryptocurrency; the owner also wants the project free to the public and run by a co-op/nonprofit. M1–M5 use simulated units only.
 - Source material (white papers, fitness AI venture brief, `digital-twin.jsx`, CS questions specs) to be added to `docs/`.
-- GitHub remote: `sudoCreate258/nymbus_v1510` (public). Renamed from `nba_smartboy` on 2026-11-11 (owner); GitHub redirects the old URL.
+- GitHub remote: `sudoCreate258/nymbus_v1510` (public).
 
 ## Status
 - 003 internal docs: `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md` (backup/restore tested byte-exact into a scratch database), `docs/DATA_MODEL.md` generated from the models by `data_model_doc` (test fails when stale). `backups/` gitignored. Local gate 393 passed.

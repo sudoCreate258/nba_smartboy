@@ -7,6 +7,12 @@ if ! git diff --quiet HEAD --; then
   echo "pre-push: commit or stash your changes first; the gate must test what you push." >&2
   exit 1
 fi
+# The gate already passed on exactly this commit (clean tree): no need to run it twice.
+head=$(git rev-parse --short HEAD)
+if grep -Eq "^PASS [^ ]+ $head: " .agents/ci-local-last.txt 2>/dev/null; then
+  echo "pre-push: local CI gate already passed on $head."
+  exit 0
+fi
 if ! sh scripts/ci-local.sh; then
   echo "pre-push: local CI gate failed; push refused." >&2
   exit 1

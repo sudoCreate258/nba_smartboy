@@ -27,7 +27,7 @@ Running the twin on Windows with Docker Desktop. Commands are PowerShell, from t
 4. Open http://localhost:8000/admin/. The port is bound to this computer only.
 5. Optional, for contributors: `powershell -File scripts/install-hooks.ps1` installs the pre-push hook (local CI gate).
 
-The database lives in the Docker volume `nba_smartboy_pgdata`. `docker compose down` keeps it; `docker compose down -v` deletes it.
+The database lives in the Docker volume `<folder>_pgdata`, where `<folder>` is the name of the repository folder (Compose names the project after it; `docker volume ls` shows it). `docker compose down` keeps it; `docker compose down -v` deletes it.
 
 ## Importing data
 
