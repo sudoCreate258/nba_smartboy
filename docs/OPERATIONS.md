@@ -158,6 +158,29 @@ Check a restore: `docker compose exec web python manage.py showmigrations core` 
 
 Every record table, the corrections (`core_supersession`) and the ledger tables refuse UPDATE and DELETE in the database itself (row triggers, M6). A mistake is fixed with a correction (a new record), never by editing. **There is no supported bypass for normal use.** What still works: inserts, a restore (it replaces whole tables), and `docker compose down -v` (deletes the database). Switching a trigger off (`ALTER TABLE ... DISABLE TRIGGER`) is a database-owner action outside normal use; any row changed that way no longer matches its CID, and `verify_ledger`, the backup verify and the import all report it.
 
+## Security checks and signed images
+
+```powershell
+powershell -File scripts/scan.ps1          # vulnerability gate: requirements.txt and the built image
+powershell -File scripts/sign-image.ps1    # build twin-web:<version> and sign it (needs your key)
+powershell -File scripts/sign-image.ps1 -Verify
+```
+
+- **Scan:** osv-scanner from Alpine 3.20 checks the pinned dependencies and the image (read from a `docker save` file; the Docker socket is never shared). It fails on HIGH/CRITICAL advisories that have a fix. A reviewed exception goes into `scan-ignore.txt` with the reason, reviewer and date. Advisories without a fix are listed, not failed. GitHub CI runs the same scan.
+- **Signing key (once, you):** create a cosign key pair in a folder **outside** this repository and keep the password in your password manager:
+  `docker run --rm -it -v C:/Users/you/keys/twin-cosign:/k -w /k alpine:3.20 sh -c "apk add cosign && cosign generate-key-pair"`
+  Then `$env:COSIGN_KEY_DIR = "C:/Users/you/keys/twin-cosign"` and `$env:COSIGN_PASSWORD = "<password>"` in the PowerShell window before signing. Without a key the script prints `SKIPPED: no signing key` and signs nothing.
+- **What is signed:** the image ID (the digest that covers every layer), the version (`git describe`) and the commit, in `dist/twin-web-<version>.json`; the signature is `dist/twin-web-<version>.json.sig`. Signing is offline (no transparency log). `-Verify` needs only `cosign.pub` and fails if the image you have is not the one that was signed.
+- **Multi-arch (ARM, Raspberry Pi) images:** not built (deferred, see DECISIONS). On a Pi, build the image there: `docker compose build`.
+
+## Updating
+
+```powershell
+powershell -File scripts/update.ps1
+```
+
+Pulls the current branch (fast-forward only), rebuilds the image with the latest Debian updates, restarts, migrates and runs the local gate; it stops at the first failing step. Dependency updates arrive as weekly Dependabot PRs into `develop`, each tested by CI before a human merges it.
+
 ## Upgrading
 
 ```powershell

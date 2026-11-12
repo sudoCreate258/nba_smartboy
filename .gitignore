@@ -18,3 +18,4 @@ backup-not-configured/
 certs/
 *.key
 cosign.key
+dist/
