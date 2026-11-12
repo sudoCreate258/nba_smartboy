@@ -2,7 +2,7 @@
 inclusion: always
 ---
 
-# Product: Human Performance Twin (repo: nba_smartboy)
+# Product: Human Performance Twin (repo: nymbus_v1510)
 
 ## What it is
 The first use case of Nymbus (see `nymbus.md`) and its one-person reference
