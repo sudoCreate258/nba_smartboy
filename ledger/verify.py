@@ -17,6 +17,48 @@ def _cid_ok(obj):
         return False
 
 
+def head(contributor):
+    """The ledger head (M6 R2): number of access events and the SHA-256 of the newest one (64 zeros when
+    there is none), plus the grant and revocation counts. Written into every backup manifest."""
+    last = AccessEvent.objects.filter(contributor=contributor).order_by("-seq").first()
+    return {"events": AccessEvent.objects.filter(contributor=contributor).count(),
+            "last_hash": ledger.digest(last.canonical()) if last else ledger.GENESIS,
+            "grants": Grant.objects.filter(contributor=contributor).count(),
+            "revocations": Revocation.objects.filter(contributor=contributor).count()}
+
+
+def newest_anchor():
+    """(set name, {handle: head}) of the newest published backup that carries ledger heads, or (None, {})."""
+    from backup.models import BackupRun
+
+    for run in BackupRun.objects.filter(published=True).order_by("-started_at").only("set_name", "manifest"):
+        heads = (run.manifest or {}).get("ledger_heads")
+        if isinstance(heads, dict):
+            return run.set_name, heads
+    return None, {}
+
+
+def compare_head(contributor, anchor, where="the backup"):
+    """Problems when the live ledger is shorter than, or differs from, an anchored head. A longer live
+    ledger is fine as long as it extends the anchored one."""
+    if not isinstance(anchor, dict):
+        return []
+    problems = []
+    events = list(AccessEvent.objects.filter(contributor=contributor).order_by("seq"))
+    anchored = anchor.get("events", 0)
+    if len(events) < anchored:
+        problems.append(f"{contributor}: the ledger is shorter than in {where}: {len(events)} access events, "
+                        f"{where} had {anchored} (events were removed)")
+    elif anchored and ledger.digest(events[anchored - 1].canonical()) != anchor.get("last_hash"):
+        problems.append(f"{contributor}: access event {anchored} differs from {where} (the chain was rewritten)")
+    for kind, model in (("grants", Grant), ("revocations", Revocation)):
+        live = model.objects.filter(contributor=contributor).count()
+        if live < anchor.get(kind, 0):
+            problems.append(f"{contributor}: {live} {kind}, fewer than the {anchor[kind]} in {where} "
+                            f"({kind} were removed)")
+    return problems
+
+
 def verify(contributor=None):
     """(problems, counts). problems == [] means every CID, the chain and every read record check out."""
     problems = []

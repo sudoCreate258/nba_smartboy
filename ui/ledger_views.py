@@ -13,6 +13,8 @@ from core.services.export import BY_KIND
 from ledger import service
 from ledger import statement as stmt_mod
 from ledger.models import Grant, Recipient, Revocation
+from ledger.verify import compare_head, newest_anchor
+from ledger.verify import head as ledger_head
 from nymbus.ledger import UNIT_LABEL
 
 from .forms import GrantForm, RevokeForm
@@ -125,8 +127,12 @@ def statement_page(request):
     rows = [{**r, "category_label": cats.get(r["category"], r["category"]),
              "recipient_label": recipients.get(r["recipient"], r["recipient"])} for r in stmt["rows"]]
     totals = [{**t, "category_label": cats.get(t["category"], t["category"])} for t in stmt["totals"]]
-    return render(request, "ui/statement.html", _context(contributor, s=stmt, rows=rows, totals=totals,
-                                                         unit=UNIT_LABEL))
+    anchor_set, heads = newest_anchor()
+    anchor = heads.get(contributor.handle)
+    live = ledger_head(contributor)
+    return render(request, "ui/statement.html", _context(
+        contributor, s=stmt, rows=rows, totals=totals, unit=UNIT_LABEL, head=live, anchor=anchor,
+        anchor_set=anchor_set, anchor_problems=compare_head(contributor, anchor) if anchor else []))
 
 
 @login_required

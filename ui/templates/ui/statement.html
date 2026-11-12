@@ -28,5 +28,11 @@
 <p>No reads in {{ s.month }}.</p>
 {% endif %}
 <p class="note">Statement CID: <code class="cid">{{ s.cid }}</code></p>
+<h2>Ledger head</h2>
+<p>{{ head.events }} read{{ head.events|pluralize }} recorded, {{ head.grants }} grant{{ head.grants|pluralize }}, {{ head.revocations }} revocation{{ head.revocations|pluralize }}. Newest event hash: <code class="cid">{{ head.last_hash }}</code></p>
+{% if anchor %}
+{% if anchor_problems %}<div class="error" role="alert">{% for p in anchor_problems %}<p>{{ p }}</p>{% endfor %}</div>
+{% else %}<p class="note">Matches the newest backup ({{ anchor_set }}: {{ anchor.events }} read{{ anchor.events|pluralize }}, hash <code class="cid">{{ anchor.last_hash }}</code>). Removing reads from the ledger would show here and in <code>verify_ledger</code>.</p>{% endif %}
+{% else %}<p class="note">No backup carries a ledger head yet; once the encrypted backup runs, each set records it so removed reads can be detected.</p>{% endif %}
 <p><a class="button" href="{% url 'ui:statement_download' %}?month={{ s.month }}">Download statement (JSON Lines)</a></p>
 {% endblock %}

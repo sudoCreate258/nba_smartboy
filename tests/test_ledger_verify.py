@@ -50,7 +50,7 @@ def run():
 
 def test_intact_ledger_verifies(mike):
     assert run().strip() == ("Ledger OK: 2 grants, 1 revocations, 4 access events; hash chain intact; "
-                             "5 record CIDs recomputed.")
+                             "5 record CIDs recomputed; no backup anchor yet.")
 
 
 def test_pure_chain_check():

@@ -30,6 +30,7 @@ from django.utils import timezone
 
 from core.models import Contributor, Supersession
 from core.services.export import EXPORT_MODELS, LEDGER_MODELS, RECORD_MODELS, export_lines, verify_line
+from ledger.verify import head as ledger_head
 from nymbus import ledger
 from nymbus.provenance import canonical_bytes
 
@@ -176,6 +177,8 @@ def build_set(folder, now=None, include_inbox=None):
             exports.append(name)
         counts = {m.record_kind: m.objects.count() for m in EXPORT_MODELS}
         counts["supersession"] = Supersession.objects.count()
+        # Ledger heads (M6): a later shortened or rewritten ledger shows against any later-kept set.
+        heads = {c.handle: ledger_head(c) for c in Contributor.objects.order_by("handle")}
     if include_inbox and Path(settings.BACKUP_INBOX_DIR).is_dir():
         with tarfile.open(folder / INBOX, "w:gz") as tar:
             for path in sorted(Path(settings.BACKUP_INBOX_DIR).rglob("*")):
@@ -189,6 +192,7 @@ def build_set(folder, now=None, include_inbox=None):
         "files": [{"name": n, "bytes": (folder / n).stat().st_size, "sha256": sha256(folder / n)} for n in files],
         "exports": exports,
         "record_counts": counts,
+        "ledger_heads": heads,
         "includes_inbox": INBOX in files,
     }
     (folder / MANIFEST).write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
@@ -267,6 +271,11 @@ def compare_with_exports(dbname, folder, manifest):
                                      for i in items])
         if broken:
             raise BackupError(f"verify: the ledger hash chain of {handle} is broken: {'; '.join(broken)}")
+    for handle, head in (manifest.get("ledger_heads") or {}).items():  # sets from before M6 have none
+        items = chains.get(handle, [])
+        last = ledger.digest(canonical_bytes("access_event", handle, items[-1]["fields"])) if items else ledger.GENESIS
+        if head.get("events") != len(items) or head.get("last_hash") != last:
+            raise BackupError(f"verify: the ledger head of {handle} in the manifest does not match the export")
     recorded = manifest["record_counts"].get("supersession")  # sets from before this field existed have none
     if restored_events != exported_events or (recorded is not None and len(restored_events) != recorded):
         raise BackupError("verify: corrections (supersession events) in the restored dump differ from the export")

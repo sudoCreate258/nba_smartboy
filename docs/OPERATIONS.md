@@ -58,7 +58,7 @@ docker compose exec web python manage.py ledger_read --recipient sim-research-pa
 docker compose exec web python manage.py verify_ledger    # recompute every CID and the hash chain; non-zero on any break
 ```
 
-The **Statement** page shows, per month and category, who read how many records, for what purpose, and the simulated credits (one per record read; not money). "Download statement" gives the same as JSON Lines with the statement's CID. Ledger rows cannot be changed or deleted, even with SQL (database triggers); `verify_ledger` detects edits made by someone who switched the triggers off. Removing the newest events or a revocation leaves a shorter but consistent chain, which only an older export or backup can reveal, so keep the backups running.
+The **Statement** page shows, per month and category, who read how many records, for what purpose, and the simulated credits (one per record read; not money). "Download statement" gives the same as JSON Lines with the statement's CID. Ledger rows cannot be changed or deleted, even with SQL (database triggers); `verify_ledger` detects edits made by someone who switched the triggers off. Removing the newest events or a revocation would leave a shorter but consistent chain, so every backup set records the ledger head (number of reads, hash of the newest, grant and revocation counts) in its manifest. `verify_ledger` compares the live ledger with the newest published backup, and the Statement page shows the head and whether it matches. For an anchor the database cannot touch, compare with a manifest you keep elsewhere: `verify_ledger --manifest path/to/manifest.json` (any set's `manifest.json`, downloaded with rclone). Keep the backups running.
 
 ## Phone checklist (manual)
 
