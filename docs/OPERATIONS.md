@@ -99,6 +99,17 @@ Each run uploads a set (database dump, your data export, a manifest) into a `sta
 
 **The backup refuses any remote that is not an rclone `crypt` remote** (an alias that leads to one is fine), so a mistake in `BACKUP_REMOTE` stops the run before anything is built instead of uploading readable files. Today shows red with the reason if a run fails or is interrupted (machine off, restart); an interrupted night is retried automatically.
 
+**Never use an employer-managed account** (work Google Drive, OneDrive for Business, ...) as the remote: your health data does not belong in a place your employer administers.
+
+**Another target: a Raspberry Pi at home over SFTP** (instead of Google Drive). Make an SFTP remote to the Pi, then the same crypt remote on top of it, so the Pi too only ever holds ciphertext:
+
+```text
+rclone config create pi-sftp sftp host 192.168.1.30 user twinbackup key_file C:/Users/you/.ssh/twin-backup
+rclone config create twin-crypt crypt remote pi-sftp:twin-backup password <your password> password2 <your salt> --obscure
+```
+
+`BACKUP_REMOTE=twin-crypt:` stays the same; the rest of this section applies unchanged.
+
 ### Restore onto a fresh machine
 
 1. Set up the twin (First setup above) and the same `twin-crypt` remote with the same password and salt, in `.env`.
