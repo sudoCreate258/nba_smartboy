@@ -55,3 +55,12 @@ footer { max-width: 40rem; margin: 2rem auto 1rem; padding: 0 1rem; color: var(-
 .records { list-style: none; padding: 0; }
 .records li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; align-items: center; min-height: 44px; border-bottom: 1px solid var(--line); }
 .bar nav { flex-wrap: wrap; }
+.chart-box { margin: 1rem 0; padding: .5rem; border: 1px solid var(--line); border-radius: 8px; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .tick { font-size: 10px; fill: var(--muted); }
+.chart .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.chart .dot { fill: var(--accent); }
+.chart .bar { fill: var(--accent); }
+.chart .band { fill: #dbe7f4; }
+.source { margin: .25rem 0 0; color: var(--muted); font-size: .85rem; }

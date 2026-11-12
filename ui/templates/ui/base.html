@@ -14,6 +14,7 @@
   <nav aria-label="Main">
     <a href="{% url 'ui:home' %}"{% if request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>Today</a>
     <a href="{% url 'ui:checkin_index' %}"{% if request.resolver_match.url_name == 'checkin_index' or request.resolver_match.url_name == 'checkin' %} aria-current="page"{% endif %}>Check in</a>
+    <a href="{% url 'ui:trends' %}"{% if request.resolver_match.url_name == 'trends' %} aria-current="page"{% endif %}>Trends</a>
     <a href="{% url 'ui:recent' %}"{% if request.resolver_match.url_name == 'recent' %} aria-current="page"{% endif %}>Recent</a>
     <form method="post" action="{% url 'ui:logout' %}" class="inline">{% csrf_token %}<button type="submit" class="link">Log out</button></form>
   </nav>

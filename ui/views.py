@@ -15,6 +15,7 @@ from core.services.snapshots import SKIPPED, SUPERSEDED
 
 from .forms import KINDS, ResetForm
 from .today import contributor_for, today
+from .trends import build as trends_build
 
 RECENT_DAYS = 14
 _IDENTITY = {"id", "cid", "contributor", "created_at"}
@@ -127,6 +128,14 @@ def recent_records(contributor, days=RECENT_DAYS, now=None):
             items = [(r, getattr(r, time_field)) for r in rows]
         out.append((kind, label, items))
     return out
+
+
+@login_required
+def trends(request):
+    contributor = contributor_for(request.user)
+    weeks = 12 if request.GET.get("weeks") == "12" else 4
+    with timezone.override(contributor.tzinfo):
+        return render(request, "ui/trends.html", _context(contributor, data=trends_build(contributor, weeks=weeks)))
 
 
 @login_required

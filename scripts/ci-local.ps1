@@ -20,6 +20,7 @@ $summary = ($out | Select-String -Pattern "\d+ (passed|failed)" | Select-Object 
 New-Item -ItemType Directory -Force .agents | Out-Null
 $result = if ($status -eq 0) { "PASS" } else { "FAIL" }
 $stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-Set-Content -Encoding utf8 .agents/ci-local-last.txt "$result $stamp $commit${dirty}: $summary"
+# No BOM (PowerShell 5's -Encoding utf8 adds one), so the pre-push hook can match the line.
+[System.IO.File]::WriteAllText((Join-Path (Get-Location) ".agents/ci-local-last.txt"), "$result $stamp $commit${dirty}: $summary`n")
 Write-Output "Local CI gate: $result ($summary)"
 exit $status
