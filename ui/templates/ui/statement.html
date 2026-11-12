@@ -2,6 +2,7 @@
 {% block title %}Statement {{ s.month }} - Twin{% endblock %}
 {% block content %}
 <h1>Statement {{ s.month }}</h1>
+{% if s.ignored_month %}<p class="msg msg-warning" role="status">"{{ s.ignored_month }}" is not a month (YYYY-MM); showing {{ s.month }} instead.</p>{% endif %}
 <p class="note">Who read which category of your data this month, for what purpose. Units are {{ unit }}: a simulation, not money. Only simulated recipients exist in this version.</p>
 {% if s.months %}
 <nav aria-label="Months"><p>{% for m in s.months %}<a href="?month={{ m }}"{% if m == s.month %} aria-current="page"{% endif %}>{{ m }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p></nav>

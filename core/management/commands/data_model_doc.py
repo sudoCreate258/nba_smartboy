@@ -63,6 +63,7 @@ MODEL_RULES = {
     Grant: [
         "`purpose` must not be blank; `end`, when set, must be after `start` (also a database constraint).",
         "Active from `start` until `end` (exclusive) and until a Revocation's `at`.",
+        "At most one grant in force per contributor, recipient and category: a grant may not overlap another one's time (until its end or revocation).",
         "Created through `ledger.service.grant` (known category, contributor lock).",
     ],
     Revocation: ["`grant_cid` must be a Grant of the same contributor; one revocation per grant."],

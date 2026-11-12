@@ -91,10 +91,16 @@ def _owners(reg):
     return {cat: (owner, kinds) for cat, (owner, kinds) in owners.items()}
 
 
+@lru_cache(maxsize=1)
+def _category_list():
+    return tuple({"id": cat, "label": CATEGORY_LABELS.get(cat, cat.replace("_", " ").capitalize()), "owner": owner,
+                  "kinds": tuple(kinds)} for cat, (owner, kinds) in _owners(registry()).items())
+
+
 def categories():
-    """[{"id", "label", "owner", "kinds"}] for every data category, core first, then modules in order."""
-    return [{"id": cat, "label": CATEGORY_LABELS.get(cat, cat.replace("_", " ").capitalize()), "owner": owner,
-             "kinds": list(kinds)} for cat, (owner, kinds) in _owners(registry()).items()]
+    """[{"id", "label", "owner", "kinds"}] for every data category, core first, then modules in order.
+    Built once from the manifests (like the registry) and copied per call."""
+    return [{**c, "kinds": list(c["kinds"])} for c in _category_list()]
 
 
 def kinds_of(category):

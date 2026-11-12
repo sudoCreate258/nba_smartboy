@@ -24,7 +24,6 @@ from django.utils import timezone
 from nymbus.provenance import canonical_bytes, compute_cid, normalize_fields
 
 from ledger.models import AccessEvent, Grant, Revocation
-from nymbus import ledger
 
 from ..models import (Contributor, DailySnapshot, DiscomfortCheck, ProbeSession, ProvenancedRecord, Reset,
                       Supersession, TrainingSession, TrainingSet, WeeklyCheck, WorkBlock)
@@ -128,13 +127,16 @@ def import_lines(lines):
                 raise ImportError_(f"line {number}: {' '.join(exc.messages)}")
             except Exception as exc:  # database constraint or conversion problem: still a line-numbered error
                 raise ImportError_(f"line {number}: {type(exc).__name__}: {exc}")
-        # Each access event was checked against the one before it as it was replayed; check the whole
-        # chain once more as stored.
-        events = AccessEvent.objects.filter(contributor=contributor).order_by("seq")
-        problems = ledger.check_chain([{"seq": e.seq, "prev_hash": e.prev_hash, "canonical": e.canonical()}
-                                       for e in events])
+        # Each access event was checked against the one before it as it was replayed. Later lines can
+        # still invalidate earlier ones (a revocation dated before a read it follows), and record
+        # references are only checkable once everything is in: run the full ledger verification on
+        # what was stored, inside the transaction, so an import never commits a ledger that
+        # verify_ledger would reject.
+        from ledger.verify import verify
+
+        problems, _ = verify(contributor)
         if problems:
-            raise ImportError_("ledger hash chain is broken: " + "; ".join(problems))
+            raise ImportError_("ledger does not verify: " + "; ".join(problems))
     return counts
 
 

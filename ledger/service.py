@@ -5,6 +5,8 @@ Every function takes the contributor row lock, so grants, revocations and reads 
 contributor are serialized: once a revocation has committed, the next read is refused.
 A refused read writes nothing. Local only: nothing here opens a network connection.
 """
+import logging
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -16,6 +18,9 @@ from nymbus.provenance import normalize_fields
 from ui.modules import categories, kinds_of
 
 from .models import AccessEvent, Grant, Revocation
+
+
+log = logging.getLogger("ledger")
 
 
 class AccessRefused(Exception):
@@ -30,23 +35,20 @@ def grant(contributor, category, recipient, purpose, end=None, now=None):
     """Grant `recipient` read access to `category` from now on (until `end`, when given)."""
     if category not in {c["id"] for c in categories()}:
         raise ValidationError({"category": f"Unknown data category {category!r}."})
-    now = now or timezone.now()
     with transaction.atomic():
         _lock(contributor)
+        now = now or timezone.now()  # read the clock only once the lock is held
         g = Grant(contributor=contributor, category=category, recipient=recipient,
                   purpose=(purpose or "").strip(), start=now, end=end)
-        g.validate()
-        if Grant.objects.filter(cid=g.compute_cid()).exists():
-            raise ValidationError("An identical grant already exists.")
-        g.save()
+        g.save()  # validation refuses a second grant in force for the same recipient and category
     return g
 
 
 def revoke(contributor, grant_cid, reason="", now=None):
     """End a grant now. The grant stays; a Revocation record supersedes it."""
-    now = now or timezone.now()
     with transaction.atomic():
         _lock(contributor)
+        now = now or timezone.now()  # read the clock only once the lock is held
         g = Grant.objects.filter(cid=grant_cid, contributor=contributor).first()
         if g is None:
             raise ValidationError("No such grant.")
@@ -84,11 +86,14 @@ def simulated_read(contributor, recipient, category, now=None, grant_cid=None):
 
     Raises AccessRefused (and writes nothing) unless an active grant allows it.
     """
-    now = now or timezone.now()
     with transaction.atomic():
         _lock(contributor)
+        now = now or timezone.now()  # read the clock only once the lock is held
         g = active_grant(contributor, recipient, category, now, grant_cid=grant_cid)
         if g is None:
+            # Not a ledger event (a refusal takes no sequence number); logged so probing is visible.
+            log.warning("refused read: %s -> %s for %s at %s (no active grant)", category, recipient,
+                        contributor.handle, now.isoformat())
             raise AccessRefused(f"No active grant lets {recipient} read {category}; nothing was read.")
         records = category_records(contributor, category)
         cids = [r.cid for r in records]

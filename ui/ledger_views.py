@@ -21,6 +21,9 @@ from .today import contributor_for
 from .views import _context
 
 
+MAX_PAST = 10  # past grants shown per category (the full history is in the export)
+
+
 def _sections(contributor, bound=None, now=None):
     """[{owner, name, on, categories: [{id, label, kinds, count, active, past, form}]}], core first."""
     now = now or timezone.now()
@@ -37,10 +40,18 @@ def _sections(contributor, bound=None, now=None):
         count = sum(BY_KIND[k].objects.current().filter(contributor=contributor).count() for k in cat["kinds"])
         active, past = [], []
         for g in (g for g in grants if g.category == cat["id"]):
-            row = {"g": g, "recipient": recipients.get(g.recipient, g.recipient), "revocation": revoked.get(g.cid)}
-            (active if g.is_active(now, revocation=row["revocation"]) or g.start > now else past).append(row)
+            row = {"g": g, "recipient": recipients.get(g.recipient, g.recipient), "revocation": revoked.get(g.cid),
+                   "later": False}
+            if g.is_active(now, revocation=row["revocation"]):
+                active.append(row)
+            elif g.start > now and row["revocation"] is None:
+                row["later"] = True  # not yet in force (only reachable through an import)
+                active.append(row)
+            else:
+                past.append(row)
         form = bound if bound is not None and bound.prefix == cat["id"] else GrantForm(prefix=cat["id"])
-        section["categories"].append({**cat, "count": count, "active": active, "past": past, "form": form})
+        section["categories"].append({**cat, "count": count, "active": active, "past": past[:MAX_PAST],
+                                      "past_total": len(past), "form": form})
     return list(sections.values())
 
 

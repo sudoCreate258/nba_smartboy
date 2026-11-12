@@ -22,7 +22,8 @@ class Recipient(models.TextChoices):
     SIM_RESEARCH_PARTNER = "sim-research-partner", "Research partner (simulated)"
 
 
-assert tuple(Recipient.values) == ledger.RECIPIENTS
+if tuple(Recipient.values) != ledger.RECIPIENTS:  # one vocabulary for Django and the plain-Python layer
+    raise RuntimeError("ledger.models.Recipient and nymbus.ledger.RECIPIENTS disagree")
 
 
 class Grant(ProvenancedRecord):
@@ -54,6 +55,30 @@ class Grant(ProvenancedRecord):
             raise ValidationError({"purpose": "State the purpose."})
         if self.start and self.end and self.end <= self.start:
             raise ValidationError({"end": "end must be after start."})
+        clash = self.overlapping().first()
+        if clash is not None:
+            raise ValidationError(
+                f"{dict(Recipient.choices).get(self.recipient, self.recipient)} already has a grant for this "
+                f"category ({clash.cid[:12]}); revoke it first, then grant again to change it.")
+
+    def overlapping(self):
+        """Other grants of the same contributor, recipient and category whose time (until their end or
+        revocation) overlaps this one. At most one grant per pair is ever in force, so a revocation
+        always ends that recipient's access to the category."""
+        if not (self.contributor_id and self.recipient and self.category and self.start):
+            return Grant.objects.none()
+        revoked = dict(Revocation.objects.filter(contributor_id=self.contributor_id).values_list("grant_cid", "at"))
+        ids = []
+        others = Grant.objects.filter(contributor_id=self.contributor_id, recipient=self.recipient,
+                                      category=self.category)
+        if self.pk:
+            others = others.exclude(pk=self.pk)
+        for g in others:
+            ends = [t for t in (g.end, revoked.get(g.cid)) if t is not None]
+            g_end = min(ends) if ends else None
+            if (g_end is None or g_end > self.start) and (self.end is None or g.start < self.end):
+                ids.append(g.pk)
+        return Grant.objects.filter(pk__in=ids)
 
     def revocation(self):
         return Revocation.objects.filter(grant_cid=self.cid, contributor_id=self.contributor_id).first()
@@ -114,6 +139,7 @@ class AccessEvent(ProvenancedRecord):
             models.UniqueConstraint(fields=["contributor", "seq"], name="accessevent_one_per_seq"),
             models.UniqueConstraint(fields=["contributor", "prev_hash"], name="accessevent_no_fork"),
         ]
+        indexes = [models.Index(fields=["contributor", "at"], name="accessevent_by_time")]
 
     def __str__(self):
         return f"#{self.seq} {self.category} -> {self.recipient} ({self.cid[:12]})"

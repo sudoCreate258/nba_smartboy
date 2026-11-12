@@ -66,6 +66,18 @@ def test_a_missing_access_event_in_the_export_is_detected(mike, tmp_path):
         runner.verify_restore(folder, manifest, scratch="twin_verify_ledger_bad")
 
 
+def test_a_gap_in_the_live_chain_fails_the_backup_verify(mike, tmp_path):
+    """Review fix: dump and export agree with each other, but the chain inside them is broken."""
+    with connection.cursor() as cur:
+        cur.execute("ALTER TABLE ledger_accessevent DISABLE TRIGGER ledger_accessevent_append_only")
+        cur.execute("DELETE FROM ledger_accessevent WHERE seq = 2")
+        cur.execute("ALTER TABLE ledger_accessevent ENABLE TRIGGER ledger_accessevent_append_only")
+    folder = tmp_path / "set"
+    manifest = runner.build_set(folder, now=NOW, include_inbox=False)
+    with pytest.raises(runner.BackupError, match="ledger hash chain of mike is broken"):
+        runner.verify_restore(folder, manifest, scratch="twin_verify_ledger_gap")
+
+
 def test_restore_brings_the_ledger_back_append_only(mike, tmp_path):
     folder = tmp_path / "set"
     runner.build_set(folder, now=NOW, include_inbox=False)

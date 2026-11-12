@@ -36,6 +36,10 @@ def verify(contributor=None):
             if r.grant_cid not in grants:
                 problems.append(f"{who}: revocation {r.cid}: revokes a grant that does not exist")
             revoked[r.grant_cid] = r.at
+        for g in grants.values():
+            if g.overlapping().filter(pk__lt=g.pk).exists():
+                problems.append(f"{who}: grant {g.cid}: overlaps another grant in force for {g.recipient} / "
+                                f"{g.category}")
         problems += [f"{who}: {p}" for p in ledger.check_chain(
             [{"seq": e.seq, "prev_hash": e.prev_hash, "canonical": e.canonical()} for e in events])]
         records = {}

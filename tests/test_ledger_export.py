@@ -117,6 +117,32 @@ def test_import_refuses_a_read_after_its_revocation(mike):
         import_lines([json.dumps(i) for i in items])
 
 
+def test_import_refuses_a_backdated_revocation_left_in_place(mike):
+    """Review fix: the revocation stays after the read in the file but is dated before it; each line
+    passes on its own, only the full verification after replay sees the inactive grant."""
+    items = [json.loads(line) for line in export_lines(mike)]
+    rev = next(i for i in items if i.get("kind") == "revocation")
+    rev["fields"]["at"] = (T + H / 2).isoformat()
+    _resign(rev)
+    wipe_all()
+    with pytest.raises(ImportError_, match="ledger does not verify: .*not active"):
+        import_lines([json.dumps(i) for i in items])
+    assert not Grant.objects.exists()
+
+
+@pytest.mark.parametrize("bad_cid", ["bafkreimissingrecord", "work"])
+def test_import_refuses_reads_of_missing_or_wrong_category_records(mike, bad_cid):
+    items = [json.loads(line) for line in export_lines(mike)]
+    if bad_cid == "work":  # a real record, but not in the event's category
+        bad_cid = next(i["cid"] for i in items if i.get("kind") == "work_block")
+    events = [i for i in items if i.get("kind") == "access_event"]
+    events[-1]["fields"]["record_cids"] = events[-1]["fields"]["record_cids"][:-1] + [bad_cid]
+    _resign(events[-1])
+    wipe_all()
+    with pytest.raises(ImportError_, match="ledger does not verify: .*(does not exist|is not in category)"):
+        import_lines([json.dumps(i) for i in items])
+
+
 # --- R9: no network ------------------------------------------------------------------------
 
 NETWORK_MODULES = {"socket", "ssl", "http", "urllib", "urllib3", "requests", "httpx", "aiohttp", "smtplib", "ftplib",

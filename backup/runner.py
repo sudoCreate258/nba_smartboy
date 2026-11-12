@@ -30,6 +30,8 @@ from django.utils import timezone
 
 from core.models import Contributor, Supersession
 from core.services.export import EXPORT_MODELS, LEDGER_MODELS, RECORD_MODELS, export_lines, verify_line
+from nymbus import ledger
+from nymbus.provenance import canonical_bytes
 
 from . import retention
 from .models import BackupRun
@@ -237,6 +239,7 @@ def compare_with_exports(dbname, folder, manifest):
         restored_events = set(conn.execute("SELECT old_cid, new_cid FROM core_supersession").fetchall())
     exported = {m.record_kind: set() for m in EXPORT_MODELS}
     exported_events = set()
+    chains = {}  # contributor -> access_event lines, to re-link the hash chain from the set itself
     for name in manifest["exports"]:
         with open(folder / name, encoding="utf-8") as fh:
             header = json.loads(fh.readline())
@@ -248,6 +251,8 @@ def compare_with_exports(dbname, folder, manifest):
                     if not verify_line(item):
                         raise BackupError(f"verify: {name} line {number}: CID does not match its content")
                     exported[item["kind"]].add(item["cid"])
+                    if item["kind"] == "access_event":
+                        chains.setdefault(item["contributor"], []).append(item)
                 elif item.get("type") == "supersession":
                     exported_events.add((item["old_cid"], item["new_cid"]))
     for kind, cids in restored.items():
@@ -255,6 +260,13 @@ def compare_with_exports(dbname, folder, manifest):
             raise BackupError(f"verify: {kind} CIDs in the restored dump differ from the export")
         if len(cids) != manifest["record_counts"].get(kind):
             raise BackupError(f"verify: {kind} count differs from the manifest")
+    for handle, items in chains.items():
+        items.sort(key=lambda i: i["fields"]["seq"])
+        broken = ledger.check_chain([{"seq": i["fields"]["seq"], "prev_hash": i["fields"]["prev_hash"],
+                                      "canonical": canonical_bytes("access_event", handle, i["fields"])}
+                                     for i in items])
+        if broken:
+            raise BackupError(f"verify: the ledger hash chain of {handle} is broken: {'; '.join(broken)}")
     recorded = manifest["record_counts"].get("supersession")  # sets from before this field existed have none
     if restored_events != exported_events or (recorded is not None and len(restored_events) != recorded):
         raise BackupError("verify: corrections (supersession events) in the restored dump differ from the export")
