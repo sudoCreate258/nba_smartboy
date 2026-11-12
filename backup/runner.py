@@ -29,7 +29,7 @@ from django.db import connection, transaction
 from django.utils import timezone
 
 from core.models import Contributor, Supersession
-from core.services.export import RECORD_MODELS, export_lines, verify_line
+from core.services.export import EXPORT_MODELS, LEDGER_MODELS, RECORD_MODELS, export_lines, verify_line
 
 from . import retention
 from .models import BackupRun
@@ -172,7 +172,7 @@ def build_set(folder, now=None, include_inbox=None):
                 for line in export_lines(contributor, now=now):
                     fh.write(line + "\n")
             exports.append(name)
-        counts = {m.record_kind: m.objects.count() for m in RECORD_MODELS}
+        counts = {m.record_kind: m.objects.count() for m in EXPORT_MODELS}
         counts["supersession"] = Supersession.objects.count()
     if include_inbox and Path(settings.BACKUP_INBOX_DIR).is_dir():
         with tarfile.open(folder / INBOX, "w:gz") as tar:
@@ -227,13 +227,15 @@ def compare_with_exports(dbname, folder, manifest):
     are the same, and so are the correction (supersession) events. Returns the number of records checked."""
     folder, db = Path(folder), _db()
     restored, restored_events = {}, set()
+    # Sets made before the ledger (M5) have no ledger counts (nor tables); their data kinds still verify.
+    models = RECORD_MODELS + [m for m in LEDGER_MODELS if m.record_kind in manifest["record_counts"]]
     with psycopg.connect(host=db["host"], port=db["port"], user=db["user"], password=db["password"],
                          dbname=dbname) as conn:
-        for model in RECORD_MODELS:
+        for model in models:
             rows = conn.execute(f'SELECT cid FROM "{model._meta.db_table}"').fetchall()
             restored[model.record_kind] = {r[0] for r in rows}
         restored_events = set(conn.execute("SELECT old_cid, new_cid FROM core_supersession").fetchall())
-    exported = {m.record_kind: set() for m in RECORD_MODELS}
+    exported = {m.record_kind: set() for m in EXPORT_MODELS}
     exported_events = set()
     for name in manifest["exports"]:
         with open(folder / name, encoding="utf-8") as fh:

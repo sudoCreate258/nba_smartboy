@@ -104,7 +104,7 @@ class AccessEvent(ProvenancedRecord):
     recipient = models.CharField(max_length=32, choices=Recipient.choices)
     category = models.CharField(max_length=64, validators=[CATEGORY])
     purpose = models.TextField(max_length=500)
-    record_cids = models.JSONField(default=list, blank=True, help_text="CIDs of the records read.")
+    record_cids = models.JSONField(blank=True, help_text="CIDs of the records read (may be empty).")
     units = models.PositiveIntegerField(help_text="Simulated credits (one per record read); not money.")
     prev_hash = models.CharField(max_length=64, help_text="SHA-256 hex of the previous event (64 zeros first).")
 

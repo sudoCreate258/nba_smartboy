@@ -41,7 +41,7 @@ class Migration(migrations.Migration):
                 ('recipient', models.CharField(choices=[('self-analysis', 'Self-analysis (simulated)'), ('sim-research-partner', 'Research partner (simulated)')], max_length=32)),
                 ('category', models.CharField(max_length=64, validators=[django.core.validators.RegexValidator('^[a-z][a-z0-9_]*$', 'A category is lower case letters, digits and underscores.')])),
                 ('purpose', models.TextField(max_length=500)),
-                ('record_cids', models.JSONField(blank=True, default=list, help_text='CIDs of the records read.')),
+                ('record_cids', models.JSONField(blank=True, help_text='CIDs of the records read (may be empty).')),
                 ('units', models.PositiveIntegerField(help_text='Simulated credits (one per record read); not money.')),
                 ('prev_hash', models.CharField(help_text='SHA-256 hex of the previous event (64 zeros first).', max_length=64)),
                 ('contributor', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='core.contributor')),
