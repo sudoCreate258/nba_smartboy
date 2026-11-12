@@ -20,12 +20,18 @@ def _normalize(value):
     return value
 
 
+def normalize_fields(fields):
+    """The JSON-ready form of a record's content fields, exactly as they are hashed
+    (datetimes as UTC ISO strings, dates/times ISO, decimals as strings)."""
+    return {k: _normalize(v) for k, v in fields.items()}
+
+
 def canonical_bytes(kind, contributor, fields):
     """Deterministic JSON bytes: sorted keys, compact separators, UTF-8."""
     payload = {
         "kind": kind,
         "contributor": contributor,
-        "fields": {k: _normalize(v) for k, v in fields.items()},
+        "fields": normalize_fields(fields),
     }
     return json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False

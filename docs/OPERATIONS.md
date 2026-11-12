@@ -40,6 +40,15 @@ docker compose exec web python manage.py ingest_training_csv data/inbox/training
 
 Each file is imported in one transaction; an error names the record or line and nothing is written. Re-importing a file only adds what is new. Formats: README sections "Probe log", "Work and zone", "Training log".
 
+## My data export
+
+```powershell
+docker compose exec web python manage.py export_my_data --out data/inbox/my-data.jsonl
+docker compose exec web python manage.py import_my_data data/inbox/my-data.jsonl   # on a fresh instance
+```
+
+JSON Lines with every record and correction (format: `docs/DATA_MODEL.md`, "Export format"). The app's Recent page has the same "Download my data" button. Import refuses a database that already has records for the contributor, and checks every CID.
+
 ## Running reports
 
 ```powershell

@@ -93,6 +93,24 @@ skipped by a daylight-saving change are rejected on import.
   (Reset -> ProbeSession, TrainingSet -> TrainingSession) follow the correction chain
   (`core.models.Lineage`).
 - Identical content gives the same CID, so re-importing a file is a no-op.
+
+## Export format (nymbus-jsonl, version 1)
+
+First draft of the Nymbus interchange contract. `manage.py export_my_data` and the app's
+"Download my data" write one JSON object per line (UTF-8), in the order things were created:
+
+- Line 1: `{"type": "export", "format": "nymbus-jsonl", "version": 1, "contributor": <handle>,
+  "timezone": <IANA zone>, "exported_at": <UTC ISO>}`
+- Record: `{"type": "record", "kind": <record kind>, "cid": ..., "contributor": <handle>,
+  "fields": {...}, "created_at": <UTC ISO>}`. `fields` is exactly the content the CID is computed
+  over (OMIT_IF_NULL fields left out while null; datetimes as UTC ISO strings, decimals as strings),
+  so `CID(canonical(kind, contributor, fields)) == cid` can be checked from the line alone.
+- Correction: `{"type": "supersession", "old_cid": ..., "new_cid": ..., "reason": ..., "created_at": ...}`
+
+`manage.py import_my_data <file>` replays the lines into a database with no records for that
+contributor, checks every CID (against the line and against the stored record) and rolls the
+whole file back on any error. `created_at` is informational; restored rows get the import time.
+Not included: Django users, ProbeBaseline settings.
 """
 
 

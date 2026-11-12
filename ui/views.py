@@ -9,7 +9,8 @@ from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.http import Http404, HttpResponse, JsonResponse
+from django.core.serializers.json import DjangoJSONEncoder
+from django.http import Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import redirect, render
 from django.templatetags.static import static
 from django.urls import reverse
@@ -18,11 +19,13 @@ from django.views.decorators.http import require_GET
 
 from core.models import DailySnapshot
 from core.services.common import DISCLAIMER, STOP_TEXT
+from core.services.export import export_lines
 from core.services.records import save_record
 from core.services.snapshots import SKIPPED, SUPERSEDED
 
 from .forms import KINDS, ResetForm
 from .today import contributor_for, today
+from .trends import as_data as trends_data
 from .trends import build as trends_build
 
 RECENT_DAYS = 14
@@ -201,6 +204,58 @@ def trends(request):
     weeks = 12 if request.GET.get("weeks") == "12" else 4
     with timezone.override(contributor.tzinfo):
         return render(request, "ui/trends.html", _context(contributor, data=trends_build(contributor, weeks=weeks)))
+
+
+@login_required
+@require_GET
+def export_download(request):
+    """'My data' button: the same JSON Lines as `manage.py export_my_data`."""
+    contributor = contributor_for(request.user)
+    stamp = timezone.now().astimezone(contributor.tzinfo).strftime("%Y-%m-%d")
+    resp = StreamingHttpResponse((line + "\n" for line in export_lines(contributor)),
+                                 content_type="application/x-ndjson; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="my-data-{contributor.handle}-{stamp}.jsonl"'
+    resp["Cache-Control"] = "no-store"
+    return resp
+
+
+def _api(view):
+    """Read-only JSON behind the same login; 403 JSON (not a redirect) when logged out."""
+    def inner(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "login required"}, status=403)
+        if request.method != "GET":
+            return JsonResponse({"error": "read-only API"}, status=405)
+        contributor = contributor_for(request.user)
+        with timezone.override(contributor.tzinfo):
+            data = view(request, contributor, *args, **kwargs)
+        resp = JsonResponse({"api": "v0", "contributor": contributor.handle, "disclaimer": DISCLAIMER, **data},
+                            encoder=DjangoJSONEncoder)
+        resp["Cache-Control"] = "no-store"
+        return resp
+    return inner
+
+
+@_api
+def api_today(request, contributor):
+    t = today(contributor)
+    t["checkins"] = [{"label": label, "done": done, "kind": kind} for label, done, kind in t["checkins"]]
+    return {"today": t}
+
+
+@_api
+def api_trends(request, contributor):
+    weeks = 12 if request.GET.get("weeks") == "12" else 4
+    return {"trends": trends_data(trends_build(contributor, weeks=weeks))}
+
+
+@_api
+def api_recent(request, contributor):
+    groups = []
+    for kind, label, items in recent_records(contributor):
+        groups.append({"kind": kind, "label": label,
+                       "records": [{"cid": r.cid, "when": when, "summary": str(r)} for r, when in items]})
+    return {"recent": groups}
 
 
 STATIC_SHELL = ["ui/app.css", "ui/offline.js", "ui/icon-192.png", "ui/icon-512.png"]
