@@ -1,0 +1,4 @@
+# Reviewed exceptions for the vulnerability gate (scripts/scan.sh, M6 R3).
+# One advisory ID (or alias, e.g. a CVE) per line, then "#" and: why it does not apply, who reviewed it, when.
+# The gate only fails on HIGH/CRITICAL advisories that have a fix; unfixed ones are listed, never ignored here.
+# Keep this file short: prefer upgrading the package.

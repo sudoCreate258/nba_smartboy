@@ -3,7 +3,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 # Backup tooling (M4.5): rclone (crypt) from Debian, and pg_dump/pg_restore 16 copied from the
 # official postgres:16 image (same Debian release) so they match the database server exactly.
+# Debian security updates are applied at build time (M6 R3: the vulnerability gate scans this image).
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends rclone libpq5 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=postgres:16 /usr/lib/postgresql/16/bin/pg_dump /usr/lib/postgresql/16/bin/pg_restore /usr/local/bin/

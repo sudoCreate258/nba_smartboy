@@ -60,3 +60,15 @@ jobs:
       # The phone app's JavaScript: syntax only (it is not run in a browser here).
       - run: python manage.py render_service_worker --out sw-rendered.js
       - run: node --check ui/static/ui/offline.js && node --check sw-rendered.js
+
+  # Vulnerability gate (M6 R3): the same script as scripts/scan.ps1. osv-scanner from Alpine 3.20 in the
+  # official alpine image; the image is read from a `docker save` tar, never through the Docker socket.
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -q -t twin-web:scan .
+      - run: mkdir -p scan-out && docker save -o scan-out/web.tar twin-web:scan
+      - run: >-
+          docker run --rm -v "$PWD:/repo:ro" -v "$PWD/scan-out/web.tar:/in/web.tar:ro" -v "$PWD/scan-out:/out"
+          alpine:3.20 sh /repo/scripts/scan.sh
