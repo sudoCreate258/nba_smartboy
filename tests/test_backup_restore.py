@@ -61,7 +61,7 @@ def test_restore_latest_from_the_remote(backed_up):
 
 
 def test_restore_refuses_to_replace_data_without_yes(backed_up):
-    with pytest.raises(CommandError, match="already has data .*core_contributor"):
+    with pytest.raises(CommandError, match="already has data .*core_dailysnapshot 2"):
         call_command("restore_backup", "--set", "latest", stdout=StringIO())
     assert state() == backed_up  # nothing was touched
     call_command("restore_backup", "--set", "latest", "--yes", stdout=StringIO())
