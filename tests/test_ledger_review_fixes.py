@@ -53,6 +53,21 @@ def test_a_read_waiting_on_a_concurrent_revoke_is_refused():
     assert AccessEvent.objects.count() == 0
 
 
+def test_a_clock_that_steps_back_cannot_date_a_read_before_a_revocation(db, monkeypatch):
+    """M6: the gate saw the VM clock step back; ledger times never go backwards per contributor."""
+    import datetime
+    from django.utils import timezone as tz
+    mike = Contributor.objects.get(handle="mike")
+    g = service.grant(mike, "probes", "self-analysis", "review")
+    service.revoke(mike, g.cid)
+    earlier = tz.now() - datetime.timedelta(minutes=5)
+    monkeypatch.setattr(service.timezone, "now", lambda: earlier)
+    with pytest.raises(AccessRefused):
+        service.simulated_read(mike, "self-analysis", "probes")
+    later = service.grant(mike, "probes", "self-analysis", "again")
+    assert later.start >= g.revocation().at  # dated at the ledger's latest time, not the stepped-back clock
+
+
 @pytest.fixture
 def strict(db):
     client = Client(enforce_csrf_checks=True)

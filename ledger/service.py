@@ -9,6 +9,7 @@ import logging
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from core.models import Contributor
@@ -31,13 +32,25 @@ def _lock(contributor):
     return Contributor.objects.select_for_update().get(pk=contributor.pk)
 
 
+def _ledger_now(contributor):
+    """The time for a ledger write, read under the contributor lock, never earlier than anything already in
+    the contributor's ledger. A host clock can step back (seen on the Docker VM); without this a read
+    right after a revocation could be dated before it and slip through."""
+    now = timezone.now()
+    latest = [AccessEvent.objects.filter(contributor=contributor).aggregate(t=Max("at"))["t"],
+              Revocation.objects.filter(contributor=contributor).aggregate(t=Max("at"))["t"],
+              Grant.objects.filter(contributor=contributor).aggregate(t=Max("start"))["t"]]
+    latest = max((t for t in latest if t is not None), default=None)
+    return max(now, latest) if latest is not None else now
+
+
 def grant(contributor, category, recipient, purpose, end=None, now=None):
     """Grant `recipient` read access to `category` from now on (until `end`, when given)."""
     if category not in {c["id"] for c in categories()}:
         raise ValidationError({"category": f"Unknown data category {category!r}."})
     with transaction.atomic():
         _lock(contributor)
-        now = now or timezone.now()  # read the clock only once the lock is held
+        now = now or _ledger_now(contributor)  # read the clock only once the lock is held
         g = Grant(contributor=contributor, category=category, recipient=recipient,
                   purpose=(purpose or "").strip(), start=now, end=end)
         g.save()  # validation refuses a second grant in force for the same recipient and category
@@ -48,7 +61,7 @@ def revoke(contributor, grant_cid, reason="", now=None):
     """End a grant now. The grant stays; a Revocation record supersedes it."""
     with transaction.atomic():
         _lock(contributor)
-        now = now or timezone.now()  # read the clock only once the lock is held
+        now = now or _ledger_now(contributor)  # read the clock only once the lock is held
         g = Grant.objects.filter(cid=grant_cid, contributor=contributor).first()
         if g is None:
             raise ValidationError("No such grant.")
@@ -88,7 +101,7 @@ def simulated_read(contributor, recipient, category, now=None, grant_cid=None):
     """
     with transaction.atomic():
         _lock(contributor)
-        now = now or timezone.now()  # read the clock only once the lock is held
+        now = now or _ledger_now(contributor)  # read the clock only once the lock is held
         g = active_grant(contributor, recipient, category, now, grant_cid=grant_cid)
         if g is None:
             # Not a ledger event (a refusal takes no sequence number); logged so probing is visible.
