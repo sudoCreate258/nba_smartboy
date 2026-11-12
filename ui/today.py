@@ -6,6 +6,7 @@ No business logic lives here: it only calls the core services and models.
 import datetime
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
 from core.models import Contributor, DailySnapshot, DiscomfortCheck, ProbeSession, Reset, WorkBlock
@@ -22,7 +23,13 @@ def contributor_for(user):
     Phase 1 has one contributor per instance; every login maps to TWIN_CONTRIBUTOR.
     Linking users to contributors is Nymbus phase 2.
     """
-    return Contributor.objects.get(handle=settings.TWIN_CONTRIBUTOR)
+    try:
+        return Contributor.objects.get(handle=settings.TWIN_CONTRIBUTOR)
+    except Contributor.DoesNotExist:
+        raise ImproperlyConfigured(
+            f"TWIN_CONTRIBUTOR={settings.TWIN_CONTRIBUTOR!r} is not a contributor; set it in .env to an existing "
+            "handle (see the admin, Contributors)."
+        )
 
 
 def local_day_bounds(contributor, day):

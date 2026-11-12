@@ -15,6 +15,7 @@ urlpatterns = [
     path("manifest.webmanifest", views.manifest, name="manifest"),
     path("sw.js", views.service_worker, name="service_worker"),
     path("offline/", views.offline, name="offline"),
+    path("csrf-token/", views.csrf_token, name="csrf_token"),
     path("my-data/", views.export_download, name="export"),
     path("modules/", views.modules_page, name="modules"),
     path("api/v0/today", views.api_today, name="api_today"),

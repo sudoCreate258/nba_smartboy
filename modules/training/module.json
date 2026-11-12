@@ -13,5 +13,5 @@
   ],
   "compute": {"profile": "on-demand", "hint": "cpu"},
   "shares": [],
-  "ui": {"checkins": [], "home": ["training_stops"], "charts": []}
+  "ui": {"checkins": [], "home": [], "charts": []}
 }

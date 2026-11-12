@@ -30,11 +30,15 @@ $branch = git rev-parse --abbrev-ref HEAD
 $pushed = "not pushed"
 if ($gate -eq 0) {
     $ErrorActionPreference = "Continue"
-    git push -u origin $branch 2>&1 | Select-String -Pattern "->|refused|gate" | ForEach-Object { "$_" }
-    $pushed = if ($LASTEXITCODE -eq 0) { "pushed $branch" } else { "push failed" }
+    $out = git push -u origin $branch 2>&1 | ForEach-Object { "$_" }
+    $pushStatus = $LASTEXITCODE  # read before anything else runs a native command
+    $out | Select-String -Pattern "->|refused|gate|rejected|error" | ForEach-Object { "$_" }
+    $pushed = if ($pushStatus -eq 0) { "pushed $branch" } else { "push failed (exit $pushStatus)" }
 }
 $line = "- $(Get-Date -Format HH:mm) $Message; commit $sha; gate: $result; $pushed"
 $log = ".planner/to-planner/progress.md"
 if (Test-Path $log) { Add-Content -Encoding utf8 $log $line }
 Write-Output $line
 if ($gate -ne 0) { exit $gate }
+if ($pushed -ne "pushed $branch") { exit 3 }  # gate passed but the push did not: never report success
+exit 0

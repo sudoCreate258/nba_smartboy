@@ -88,7 +88,8 @@ def test_disabled_zone_module_hides_its_ui_but_keeps_records(client_in, mike):
     index = client_in.get(reverse("ui:checkin_index")).content.decode()
     assert "Work block" not in index and "Daily snapshot" in index
     t = today(mike)
-    assert t["zone"] is None and t["stop_signals"] == []
+    assert t["zone"] is None
+    assert [s["what"] for s in t["stop_signals"]] == ["wrist discomfort, score 7"]  # safety output is core
     assert {c[2] for c in t["checkins"]} == {"snapshot", "probe"}
     groups = {c["group"] for c in build(mike, weeks=4)["charts"]}
     assert "work" not in groups and "discomfort" not in groups and "probes" in groups

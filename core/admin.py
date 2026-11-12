@@ -95,6 +95,8 @@ class CorrectableAdmin(ImmutableAdmin):
                 old = model.objects.filter(cid=source_cid).first()
                 if old is None:
                     raise ValidationError("The record to correct (supersedes) does not exist.")
+                if not model.objects.current().filter(pk=old.pk).exists():
+                    raise ValidationError("This record was already corrected; correct its current version instead.")
                 contributor = cleaned.get("contributor")
                 if contributor is not None and contributor.pk != old.contributor_id:
                     raise ValidationError("A correction must have the same contributor as the record it supersedes.")
@@ -112,7 +114,12 @@ class CorrectableAdmin(ImmutableAdmin):
             obj.pk, obj.cid, obj._state.adding = old.pk, old.cid, False
             self.message_user(request, "Identical record already exists; nothing written.", messages.WARNING)
             return
-        record, _ = save_record(obj, supersedes=old, reason="admin correction")
+        try:
+            record, _ = save_record(obj, supersedes=old, reason="admin correction")
+        except ValidationError as exc:  # lost a race with another correction: report, write nothing
+            obj.pk, obj.cid, obj._state.adding = old.pk, old.cid, False
+            self.message_user(request, " ".join(exc.messages), messages.ERROR)
+            return
         obj.pk, obj.cid, obj._state.adding = record.pk, record.cid, False
         self.message_user(request, "Saved as a correction; the previous record is superseded.")
 

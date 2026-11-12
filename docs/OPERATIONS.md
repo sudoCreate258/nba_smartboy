@@ -49,6 +49,18 @@ docker compose exec web python manage.py import_my_data data/inbox/my-data.jsonl
 
 JSON Lines with every record and correction (format: `docs/DATA_MODEL.md`, "Export format"). The app's Recent page has the same "Download my data" button. Import refuses a database that already has records for the contributor, and checks every CID.
 
+## Phone checklist (manual)
+
+The test suite checks the server side of the phone app and that the scripts parse; it does not run them in a browser. After changes to `ui/static/ui/offline.js` or `ui/templates/ui/sw.js`, check on a real phone (target: Chrome on Android 8+, Safari on iOS 14+) and on the computer's browser:
+
+1. Log in. Today, Check in, Trends, Recent and Modules load; the page is readable without zooming.
+2. Submit a discomfort check: you return to Today with "saved".
+3. Stop the instance (`docker compose stop web`), submit a check-in: "saved on this phone" appears and the status line counts it. Start the instance (`docker compose start web`) and reopen the app (or wait a minute): the count drops to zero and Recent shows the check-in once.
+4. Repeat step 3, then log out and log in again before restarting the instance: the queued check-in is still sent once (fresh CSRF token).
+5. Queue a correction of a record, correct the same record online, then let the queue send: the queued item is listed as "could not be saved: ... already corrected" and later items still send.
+6. On `http://localhost:8000/` only: install to the home screen, view Trends, go offline, reopen Trends (cached copy), log out, go offline again: Trends is no longer available offline.
+7. In LAN mode (`http://<address>:8000/` on the phone): steps 1-5 work; install and offline pages are not offered (plain HTTP; HTTPS is M6).
+
 ## Running reports
 
 ```powershell

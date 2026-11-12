@@ -36,6 +36,8 @@ button.primary { font: inherit; min-height: 48px; padding: .5rem 1rem; border: 0
 .flag { display: inline-block; padding: 0 .5rem; border-radius: 4px; border: 1px solid var(--line); font-weight: 600; }
 .flag-amber { color: var(--amber); background: var(--amber-bg); border-color: var(--amber); }
 .flag-red { color: var(--red); background: var(--red-bg); border-color: var(--red); }
+.flag-none { color: var(--ok); border-color: var(--ok); }
+.flag-insufficient-data { color: var(--muted); border-style: dashed; }
 .why { color: var(--muted); font-size: .9rem; }
 footer { max-width: 40rem; margin: 2rem auto 1rem; padding: 0 1rem; color: var(--muted); font-size: .9rem; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

@@ -132,7 +132,13 @@ Open http://localhost:8000/ and log in with your Django user. It has these pages
 - **Trends:** charts for the last 4 or 12 weeks.
 - **Recent:** "Correct this" on any record from the last 14 days. A correction saves a new version; nothing is edited or deleted.
 
-The app works without JavaScript. With it, the app can be installed to the home screen (browser menu, "Add to Home screen"), pages you viewed open offline, and check-ins made offline are kept on the phone and sent when your instance is reachable. A check-in sent twice is stored once.
+The app works without JavaScript. With it, check-ins you make while the instance is unreachable are kept on the phone and sent when it is reachable again; a check-in sent twice is stored once.
+
+Installing to the home screen and opening viewed pages offline need a service worker, which browsers only allow on `https://` or on `localhost`. So:
+- **On this computer** (`http://localhost:8000/`): install and offline pages work.
+- **On a phone in LAN mode** (plain `http://<address>:8000/`): the offline check-in queue works, but the browser will not install the app or keep pages offline. That arrives with HTTPS in M6.
+
+Logging out deletes the pages saved on the device. Check-ins not yet sent stay on the device and are sent after the next login. A manual phone checklist is in `docs/OPERATIONS.md`.
 
 **Debug:** `DJANGO_DEBUG=1` is for local development only (detailed error pages). Normal use is `DJANGO_DEBUG=0`, which needs a `DJANGO_SECRET_KEY`; `.env.example` shows how to generate one.
 

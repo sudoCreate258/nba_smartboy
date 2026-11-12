@@ -12,8 +12,15 @@ $dirty = if ($LASTEXITCODE -ne 0) { " (with uncommitted changes)" } else { "" }
 Write-Output "Local CI gate on $commit$dirty"
 
 $ErrorActionPreference = "Continue"
-$out = docker compose run --rm -T web sh -c "pytest -q -p no:cacheprovider && python manage.py makemigrations --check --dry-run" 2>&1 | ForEach-Object { "$_" }
+$out = docker compose run --rm -T web sh -c "pytest -q -p no:cacheprovider && python manage.py makemigrations --check --dry-run && python manage.py render_service_worker --out .agents/sw-rendered.js" 2>&1 | ForEach-Object { "$_" }
 $status = $LASTEXITCODE
+if ($status -eq 0) {
+    # JavaScript syntax (official node image; the scripts are not run in a browser here).
+    $root = (Get-Location).Path
+    $js = docker run --rm -v "${root}:/w" -w /w node:22-alpine sh -c "node --check ui/static/ui/offline.js && node --check .agents/sw-rendered.js && echo 'JavaScript syntax OK'" 2>&1 | ForEach-Object { "$_" }
+    $status = $LASTEXITCODE
+    $out = @($out) + @($js)
+}
 $out | Select-Object -Last 5 | Write-Output
 $summary = ($out | Select-String -Pattern "\d+ (passed|failed)" | Select-Object -Last 1).Line
 

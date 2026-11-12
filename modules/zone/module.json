@@ -17,6 +17,5 @@
   ],
   "compute": {"profile": "on-demand", "hint": "cpu"},
   "shares": [],
-  "ui": {"checkins": ["work", "discomfort", "reset"], "home": ["zone_flag", "discomfort_stops"],
-         "charts": ["work", "discomfort"]}
+  "ui": {"checkins": ["work", "discomfort", "reset"], "home": ["zone_flag"], "charts": ["work", "discomfort"]}
 }

@@ -14,6 +14,7 @@ were created; replaying them in that order rebuilds the same records and history
 import datetime
 import json
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -76,47 +77,104 @@ def import_lines(lines):
                 items.append((number, json.loads(line)))
             except json.JSONDecodeError as exc:
                 raise ImportError_(f"line {number}: not JSON ({exc.msg})")
-    if not items or items[0][1].get("type") != "export" or items[0][1].get("format") != FORMAT:
+    header = items[0][1] if items else None
+    if not isinstance(header, dict) or header.get("type") != "export" or header.get("format") != FORMAT:
         raise ImportError_("line 1: not a nymbus-jsonl export header")
-    header = items[0][1]
     if header.get("version") != VERSION:
         raise ImportError_(f"line 1: unsupported version {header.get('version')!r}")
-    replaces = {i["new_cid"]: i["old_cid"] for _, i in items if i.get("type") == "supersession"}
+    _check_header(header)
+    for number, item in items[1:]:
+        _check_line(number, item)
+    replaces = {i["new_cid"]: i["old_cid"] for _, i in items if i["type"] == "supersession"}
     counts = {"records": 0, "supersessions": 0, "contributor": header["contributor"]}
     with transaction.atomic():
-        contributor, _ = Contributor.objects.get_or_create(handle=header["contributor"],
-                                                           defaults={"timezone": header["timezone"]})
+        contributor, created = Contributor.objects.get_or_create(handle=header["contributor"],
+                                                                 defaults={"timezone": header["timezone"]})
         if any(m.objects.filter(contributor=contributor).exists() for m in RECORD_MODELS):
             raise ImportError_(f"contributor {contributor.handle} already has records; import into a fresh database")
+        if contributor.timezone != header["timezone"]:
+            # No records yet, so local days and weeks are defined by the export's time zone.
+            contributor.timezone = header["timezone"]
+            try:
+                contributor.full_clean()
+            except ValidationError:
+                raise ImportError_(f"line 1: unknown time zone {header['timezone']!r}")
+            contributor.save()
+        imported = {}  # cid -> record, to validate correction lines
         for number, item in items[1:]:
-            kind = item.get("type")
-            if kind == "record":
-                model = BY_KIND.get(item.get("kind"))
-                if model is None:
-                    raise ImportError_(f"line {number}: unknown record kind {item.get('kind')!r}")
-                if item.get("contributor") != contributor.handle:
-                    raise ImportError_(f"line {number}: record of another contributor")
-                if not verify_line(item):
-                    raise ImportError_(f"line {number}: CID does not match the line's content")
-                record = model(contributor=contributor)
-                for name, value in item["fields"].items():
-                    field = model._meta.get_field(name)
-                    setattr(record, field.attname, field.to_python(value))
-                if item["cid"] in replaces and hasattr(record, "replaces_cid"):
-                    record.replaces_cid = replaces[item["cid"]]  # a correction may overlap what it replaces
-                try:
-                    # ProvenancedRecord.save: validation and CID, without the one-per-date snapshot
-                    # rule; history comes from the supersession lines.
-                    ProvenancedRecord.save(record)
-                except Exception as exc:
-                    raise ImportError_(f"line {number}: {exc}")
-                if record.cid != item["cid"]:
-                    raise ImportError_(f"line {number}: stored CID {record.cid} differs from {item['cid']}")
-                counts["records"] += 1
-            elif kind == "supersession":
-                Supersession.objects.create(old_cid=item["old_cid"], new_cid=item["new_cid"],
-                                            contributor=contributor, reason=item.get("reason", ""))
-                counts["supersessions"] += 1
-            else:
-                raise ImportError_(f"line {number}: unknown line type {kind!r}")
+            try:
+                if item["type"] == "record":
+                    record = _import_record(number, item, contributor, replaces)
+                    imported[record.cid] = record
+                    counts["records"] += 1
+                else:
+                    old, new = imported.get(item["old_cid"]), imported.get(item["new_cid"])
+                    if old is None or new is None:
+                        raise ImportError_(f"line {number}: correction refers to a record that is not in the file "
+                                           "before it")
+                    Supersession.record(old, new, reason=item["reason"])  # same kind, contributor, not self
+                    counts["supersessions"] += 1
+            except ImportError_:
+                raise
+            except ValidationError as exc:
+                raise ImportError_(f"line {number}: {' '.join(exc.messages)}")
+            except Exception as exc:  # database constraint or conversion problem: still a line-numbered error
+                raise ImportError_(f"line {number}: {type(exc).__name__}: {exc}")
     return counts
+
+
+_HEADER = {"type": str, "format": str, "version": int, "contributor": str, "timezone": str, "exported_at": str}
+_RECORD = {"type": str, "kind": str, "cid": str, "contributor": str, "fields": dict, "created_at": str}
+_SUPERSESSION = {"type": str, "old_cid": str, "new_cid": str, "reason": str, "created_at": str}
+
+
+def _check_shape(number, item, shape):
+    if not isinstance(item, dict):
+        raise ImportError_(f"line {number}: not a JSON object")
+    for key, kind in shape.items():
+        if not isinstance(item.get(key), kind) or isinstance(item.get(key), bool) != (kind is bool):
+            raise ImportError_(f"line {number}: '{key}' must be a {kind.__name__}")
+    extra = set(item) - set(shape)
+    if extra:
+        raise ImportError_(f"line {number}: unexpected keys {', '.join(sorted(extra))}")
+
+
+def _check_header(header):
+    _check_shape(1, header, _HEADER)
+
+
+def _check_line(number, item):
+    kind = item.get("type") if isinstance(item, dict) else None
+    if kind == "record":
+        _check_shape(number, item, _RECORD)
+        if item["kind"] not in BY_KIND:
+            raise ImportError_(f"line {number}: unknown record kind {item['kind']!r}")
+    elif kind == "supersession":
+        _check_shape(number, item, _SUPERSESSION)
+        if item["old_cid"] == item["new_cid"]:
+            raise ImportError_(f"line {number}: a record cannot supersede itself")
+    else:
+        raise ImportError_(f"line {number}: unknown line type {kind!r}")
+
+
+def _import_record(number, item, contributor, replaces):
+    model = BY_KIND[item["kind"]]
+    if item["contributor"] != contributor.handle:
+        raise ImportError_(f"line {number}: record of another contributor")
+    if not verify_line(item):
+        raise ImportError_(f"line {number}: CID does not match the line's content")
+    record = model(contributor=contributor)
+    content = {f.name: f for f in model._meta.concrete_fields if f.name not in ("id", "cid", "contributor", "created_at")}
+    for name, value in item["fields"].items():
+        field = content.get(name)
+        if field is None:
+            raise ImportError_(f"line {number}: unknown field {name!r} for {item['kind']}")
+        setattr(record, field.attname, field.to_python(value))
+    if item["cid"] in replaces and hasattr(record, "replaces_cid"):
+        record.replaces_cid = replaces[item["cid"]]  # a correction may overlap what it replaces
+    # ProvenancedRecord.save: validation and CID, without the one-per-date snapshot rule;
+    # history comes from the supersession lines.
+    ProvenancedRecord.save(record)
+    if record.cid != item["cid"]:
+        raise ImportError_(f"line {number}: stored CID {record.cid} differs from {item['cid']}")
+    return record

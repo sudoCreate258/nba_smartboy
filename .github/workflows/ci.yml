@@ -44,3 +44,6 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python manage.py makemigrations --check --dry-run
       - run: pytest
+      # The phone app's JavaScript: syntax only (it is not run in a browser here).
+      - run: python manage.py render_service_worker --out sw-rendered.js
+      - run: node --check ui/static/ui/offline.js && node --check sw-rendered.js

@@ -6,7 +6,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.views import LoginView
-from django.core.cache import cache
+from django.middleware.csrf import get_token
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
@@ -23,6 +23,7 @@ from core.services.export import export_lines
 from core.services.records import save_record
 from core.services.snapshots import SKIPPED, SUPERSEDED
 
+from . import ratelimit
 from .forms import KINDS, ResetForm
 from .models import ModuleSetting
 from .modules import enabled_ids, is_on, registry
@@ -53,31 +54,20 @@ class RateLimitedLoginView(LoginView):
     template_name = "ui/login.html"
     redirect_authenticated_user = True
 
-    def _keys(self):
-        username = (self.request.POST.get("username") or "").strip().lower()
-        address = self.request.META.get("REMOTE_ADDR", "")
-        return [f"login-fail:user:{username}", f"login-fail:addr:{address}"]
-
-    def _blocked(self):
-        return any((cache.get(k) or 0) >= settings.TWIN_LOGIN_MAX_FAILURES for k in self._keys())
-
     def post(self, request, *args, **kwargs):
-        if self._blocked():
+        if ratelimit.blocked(request):
             form = self.get_form()
             form.errors.clear()
-            minutes = settings.TWIN_LOGIN_WINDOW_SECONDS // 60
-            form.add_error(None, f"Too many failed attempts. Wait {minutes} minutes and try again.")
+            form.add_error(None, ratelimit.message())
             return self.render_to_response(self.get_context_data(form=form), status=429)
         return super().post(request, *args, **kwargs)
 
     def form_invalid(self, form):
-        for key in self._keys():
-            cache.add(key, 0, settings.TWIN_LOGIN_WINDOW_SECONDS)
-            cache.incr(key)
+        ratelimit.record_failure(self.request)
         return super().form_invalid(form)
 
     def form_valid(self, form):
-        cache.delete(self._keys()[0])
+        ratelimit.clear(self.request)  # both the username and the address count
         return super().form_valid(form)
 
 
@@ -133,9 +123,30 @@ def _login_or_403(view):
     return inner
 
 
+def _refuse(replay, status, outcome, message):
+    """A permanent refusal: JSON for replays (the queue marks the item and moves on), None otherwise."""
+    if replay:
+        return JsonResponse({"outcome": outcome, "message": message}, status=status)
+    return None
+
+
+@login_required
+@require_GET
+def csrf_token(request):
+    """A current CSRF token for the offline queue: Django rotates it at login, and the queued
+    form bodies carry the token from when they were saved (the cookie is HttpOnly)."""
+    resp = JsonResponse({"token": get_token(request)})
+    resp["Cache-Control"] = "no-store"
+    return resp
+
+
 @_login_or_403
 def checkin(request, kind):
+    replay = request.headers.get("X-Offline-Replay")  # "live" (online submit) or "queue" (sent from the phone's queue)
     if kind not in active_kinds():  # unknown, or its module is off
+        refused = _refuse(replay, 404, "gone", f"Check-in type '{kind}' is not available (its module may be off).")
+        if refused:
+            return refused
         raise Http404
     label, form_class = KINDS[kind]
     model = form_class._meta.model
@@ -146,13 +157,19 @@ def checkin(request, kind):
         if cid:
             supersedes = model.objects.filter(cid=cid, contributor=contributor).first()
             if supersedes is None:
+                refused = _refuse(replay, 404, "gone", "The record to correct does not exist.")
+                if refused:
+                    return refused
                 raise Http404
             if not model.objects.current().filter(pk=supersedes.pk).exists():
-                messages.warning(request, "That record was already corrected; correct its current version instead.")
+                text = "That record was already corrected; correct its current version instead."
+                refused = _refuse(replay, 409, "stale", text)
+                if refused:
+                    return refused
+                messages.warning(request, text)
                 return redirect("ui:recent")
         extra = {"contributor": contributor} if form_class is ResetForm else {}
         instance = _instance(model, contributor, form_class._meta.fields, supersedes)
-        replay = request.headers.get("X-Offline-Replay")  # "live" (online submit) or "queue" (sent from the phone's queue)
         if request.method == "POST":
             form = form_class(request.POST, instance=instance, **extra)
             if form.is_valid():
@@ -179,8 +196,10 @@ def checkin(request, kind):
                     return redirect("ui:home")
             if replay:
                 errors = {k: [str(m) for m in v] for k, v in form.errors.items()}
-                return JsonResponse({"outcome": "invalid", "errors": errors,
-                                     "message": " ".join(m for v in errors.values() for m in v)}, status=400)
+                text = " ".join(m for v in errors.values() for m in v)
+                stale = "already corrected" in text
+                return JsonResponse({"outcome": "stale" if stale else "invalid", "errors": errors, "message": text},
+                                    status=409 if stale else 400)
             form.mark_errors()
         else:
             form = form_class(initial=_initial(kind, form_class, supersedes, timezone.now()), instance=instance, **extra)
@@ -315,7 +334,8 @@ def service_worker(request):
     """Served from the site root so its scope covers every page (public: no personal data)."""
     shell = [static(n) for n in STATIC_SHELL] + [reverse("ui:offline"), reverse("ui:manifest")]
     body = render(request, "ui/sw.js", {"version": _shell_version(), "shell": shell,
-                                        "offline_url": reverse("ui:offline")}).content
+                                        "offline_url": reverse("ui:offline"),
+                                        "manifest_url": reverse("ui:manifest")}).content
     resp = HttpResponse(body, content_type="application/javascript; charset=utf-8")
     resp["Cache-Control"] = "no-cache"
     resp["Service-Worker-Allowed"] = "/"

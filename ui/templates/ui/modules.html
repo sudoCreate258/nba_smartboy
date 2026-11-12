@@ -2,7 +2,7 @@
 {% block title %}Modules - Twin{% endblock %}
 {% block content %}
 <h1>Modules</h1>
-<p class="note">Each feature is a module. Turning one off hides its check-ins, home sections and charts. Its records stay stored, with their history, and stay in "Download my data". Per-category sharing permissions arrive in M5.</p>
+<p class="note">Each feature is a module. Turning one off hides its check-ins, home sections and charts. Stop signals (sharp or numb discomfort, joint pain 2 or more) always show on Today, whatever is switched off. Its records stay stored, with their history, and stay in "Download my data". Per-category sharing permissions arrive in M5.</p>
 {% for row in rows %}
 <section class="module" aria-labelledby="mod-{{ row.m.id }}">
   <h2 id="mod-{{ row.m.id }}">{{ row.m.name }} <span class="flag{% if not row.on %} flag-amber{% endif %}">{% if row.on %}on{% else %}off{% endif %}</span></h2>
