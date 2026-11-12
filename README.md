@@ -1,8 +1,8 @@
-# nba_smartboy
+# nymbus_v1510
 
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-![CI](https://github.com/sudoCreate258/nba_smartboy/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/sudoCreate258/nymbus_v1510/actions/workflows/ci.yml/badge.svg)
 
 
 Local-first personal health digital twin (Nymbus phase 1). Django 5 + PostgreSQL 16 in Docker Compose. Health data stays local.
@@ -138,3 +138,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model, commit style, an
 ## Layout
 
 See `.kiro/steering/tech.md`. Decisions are logged in `docs/DECISIONS.md`.
+
+- `docs/ARCHITECTURE.md`: components, data flow, Nymbus layer mapping, trust boundaries.
+- `docs/DATA_MODEL.md`: every record type, its fields, bounds and CID rules (generated: `python manage.py data_model_doc`).
+- `docs/OPERATIONS.md`: setup, imports, reports, backup and restore, upgrades.
