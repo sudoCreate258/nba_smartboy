@@ -1,5 +1,6 @@
 """M4-T2: check-in forms for the five record types and "Correct this" (R1)."""
 import datetime
+import re
 from decimal import Decimal
 
 import pytest
@@ -47,7 +48,8 @@ MODELS = {"snapshot": DailySnapshot, "probe": ProbeSession, "work": WorkBlock, "
 def test_forms_render_without_javascript(client_in, mike, kind):
     page = client_in.get(url(kind))
     html = page.content.decode()
-    assert page.status_code == 200 and "<script" not in html
+    assert page.status_code == 200 and 'method="post"' in html  # a plain HTML form; JS only enhances it
+    assert re.findall(r"<script[^>]*>", html) == ['<script src="/static/ui/offline.js" defer>']
     assert 'name="csrfmiddlewaretoken"' in html and 'type="submit"' in html
 
 

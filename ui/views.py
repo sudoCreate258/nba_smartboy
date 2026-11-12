@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import datetime
+import hashlib
+from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.http import Http404
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.templatetags.static import static
+from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.http import require_GET
 
 from core.models import DailySnapshot
 from core.services.common import DISCLAIMER, STOP_TEXT
@@ -68,7 +73,18 @@ def _instance(model, contributor, form_fields, supersedes):
     return record
 
 
-@login_required
+def _login_or_403(view):
+    """login_required, except that a replay from the offline queue gets JSON 403 instead of a redirect."""
+    wrapped = login_required(view)
+
+    def inner(request, *args, **kwargs):
+        if request.headers.get("X-Offline-Replay") and not request.user.is_authenticated:
+            return JsonResponse({"outcome": "login", "message": "Log in again to send saved check-ins."}, status=403)
+        return wrapped(request, *args, **kwargs)
+    return inner
+
+
+@_login_or_403
 def checkin(request, kind):
     if kind not in KINDS:
         raise Http404
@@ -87,6 +103,7 @@ def checkin(request, kind):
                 return redirect("ui:recent")
         extra = {"contributor": contributor} if form_class is ResetForm else {}
         instance = _instance(model, contributor, form_class._meta.fields, supersedes)
+        replay = request.headers.get("X-Offline-Replay")  # "live" (online submit) or "queue" (sent from the phone's queue)
         if request.method == "POST":
             form = form_class(request.POST, instance=instance, **extra)
             if form.is_valid():
@@ -99,12 +116,22 @@ def checkin(request, kind):
                         form.add_error(None, exc.messages)
                 else:
                     if outcome == SKIPPED:
-                        messages.info(request, f"{label}: already saved (same content); nothing new written.")
+                        text = f"{label}: already saved (same content); nothing new written."
                     elif outcome == SUPERSEDED and supersedes is not None:
-                        messages.success(request, f"{label} saved as a correction; the earlier version is kept in history.")
+                        text = f"{label} saved as a correction; the earlier version is kept in history."
                     else:
-                        messages.success(request, f"{label} saved.")
+                        text = f"{label} saved."
+                    if replay:
+                        if replay == "live":
+                            messages.success(request, text)
+                        return JsonResponse({"outcome": outcome, "cid": record.cid, "message": text,
+                                             "redirect": reverse("ui:home")})
+                    (messages.info if outcome == SKIPPED else messages.success)(request, text)
                     return redirect("ui:home")
+            if replay:
+                errors = {k: [str(m) for m in v] for k, v in form.errors.items()}
+                return JsonResponse({"outcome": "invalid", "errors": errors,
+                                     "message": " ".join(m for v in errors.values() for m in v)}, status=400)
             form.mark_errors()
         else:
             form = form_class(initial=_initial(kind, form_class, supersedes, timezone.now()), instance=instance, **extra)
@@ -136,6 +163,48 @@ def trends(request):
     weeks = 12 if request.GET.get("weeks") == "12" else 4
     with timezone.override(contributor.tzinfo):
         return render(request, "ui/trends.html", _context(contributor, data=trends_build(contributor, weeks=weeks)))
+
+
+STATIC_SHELL = ["ui/app.css", "ui/offline.js", "ui/icon-192.png", "ui/icon-512.png"]
+
+
+def _shell_version():
+    """Changes whenever a shell file changes, so phones drop the old cache."""
+    digest = hashlib.sha256()
+    for name in STATIC_SHELL:
+        digest.update((Path(__file__).parent / "static" / name).read_bytes())
+    digest.update((Path(__file__).parent / "templates" / "ui" / "sw.js").read_bytes())
+    return digest.hexdigest()[:12]
+
+
+@require_GET
+def manifest(request):
+    """Web app manifest (public: no personal data). Installable to the home screen."""
+    data = {
+        "name": "Twin", "short_name": "Twin", "start_url": reverse("ui:home"), "scope": "/",
+        "display": "standalone", "background_color": "#fdfdfb", "theme_color": "#0b5cad",
+        "description": "Your own instance: daily check-ins and trends. Load gauge, not a medical assessment.",
+        "icons": [{"src": static("ui/icon-192.png"), "sizes": "192x192", "type": "image/png"},
+                  {"src": static("ui/icon-512.png"), "sizes": "512x512", "type": "image/png"}],
+    }
+    return JsonResponse(data, content_type="application/manifest+json")
+
+
+@require_GET
+def service_worker(request):
+    """Served from the site root so its scope covers every page (public: no personal data)."""
+    shell = [static(n) for n in STATIC_SHELL] + [reverse("ui:offline"), reverse("ui:manifest")]
+    body = render(request, "ui/sw.js", {"version": _shell_version(), "shell": shell,
+                                        "offline_url": reverse("ui:offline")}).content
+    resp = HttpResponse(body, content_type="application/javascript; charset=utf-8")
+    resp["Cache-Control"] = "no-cache"
+    resp["Service-Worker-Allowed"] = "/"
+    return resp
+
+
+@require_GET
+def offline(request):
+    return render(request, "ui/offline.html", {"disclaimer": DISCLAIMER})
 
 
 @login_required

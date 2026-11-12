@@ -4,7 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Twin{% endblock %}</title>
+<meta name="theme-color" content="#0b5cad">
+<link rel="manifest" href="{% url 'ui:manifest' %}">
+<link rel="apple-touch-icon" href="{% static 'ui/icon-192.png' %}">
 <link rel="stylesheet" href="{% static 'ui/app.css' %}">
+<script src="{% static 'ui/offline.js' %}" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -21,6 +25,7 @@
   {% endif %}
 </header>
 <main id="main">
+<p id="queue-status" class="msg msg-warning" role="status" hidden></p>
 {% if messages %}<div class="messages" role="status">{% for m in messages %}<p class="msg msg-{{ m.tags }}">{{ m }}</p>{% endfor %}</div>{% endif %}
 {% block content %}{% endblock %}
 </main>

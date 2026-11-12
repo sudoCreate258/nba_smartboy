@@ -1,0 +1,7 @@
+{% extends "ui/base.html" %}
+{% block title %}Offline - Twin{% endblock %}
+{% block content %}
+<h1>No connection to your instance</h1>
+<p>This page has not been saved on this phone yet. Pages you viewed before still open, and check-ins you make now are kept on this phone and sent when your instance is reachable again.</p>
+<p><a href="{% url 'ui:checkin_index' %}">Check in</a></p>
+{% endblock %}

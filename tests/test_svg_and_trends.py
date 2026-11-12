@@ -103,7 +103,8 @@ def test_trends_page(client_in, mike, weeks, expected):
     html = page.content.decode()
     assert page.status_code == 200 and f"<strong>{expected}</strong>" in html
     assert html.count("<svg ") >= 11 and html.count("Load gauge, not a medical assessment.") >= 11
-    assert "<script" not in html and not re.search(r"https?://", html)
+    assert re.findall(r"<script[^>]*>", html) == ['<script src="/static/ui/offline.js" defer>']
+    assert not re.search(r"https?://", html)
     assert len(page.content) < 200_000
 
 

@@ -6,7 +6,7 @@
 {% if form.non_field_errors %}
 <div class="error" role="alert" id="err-form">{% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>
 {% endif %}
-<form method="post" class="stack" novalidate>
+<form method="post" action="{{ request.path }}" class="stack" novalidate data-offline="{{ label }}">
   {% csrf_token %}
   {% if supersedes %}<input type="hidden" name="supersedes" value="{{ supersedes.cid }}">{% endif %}
   {% for field in form %}
