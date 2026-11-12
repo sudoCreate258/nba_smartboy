@@ -24,6 +24,8 @@ from core.services.records import save_record
 from core.services.snapshots import SKIPPED, SUPERSEDED
 
 from .forms import KINDS, ResetForm
+from .models import ModuleSetting
+from .modules import enabled_ids, is_on, registry
 from .today import contributor_for, today
 from .trends import as_data as trends_data
 from .trends import build as trends_build
@@ -36,6 +38,12 @@ _NOW_FIELDS = {"probe": "started_at", "discomfort": "at", "reset": "at"}
 
 def _context(contributor, **extra):
     return {"contributor": contributor, "disclaimer": DISCLAIMER, "stop_text": STOP_TEXT, **extra}
+
+
+def active_kinds(enabled=None):
+    """Check-in kinds whose module is on (the snapshot form belongs to the core)."""
+    enabled = enabled_ids() if enabled is None else enabled
+    return {k: v for k, v in KINDS.items() if is_on("checkins", k, enabled)}
 
 
 class RateLimitedLoginView(LoginView):
@@ -77,13 +85,13 @@ class RateLimitedLoginView(LoginView):
 def home(request):
     contributor = contributor_for(request.user)
     with timezone.override(contributor.tzinfo):
-        return render(request, "ui/home.html", _context(contributor, t=today(contributor), kinds=KINDS))
+        return render(request, "ui/home.html", _context(contributor, t=today(contributor), kinds=active_kinds()))
 
 
 @login_required
 def checkin_index(request):
     contributor = contributor_for(request.user)
-    return render(request, "ui/checkin_index.html", _context(contributor, kinds=KINDS))
+    return render(request, "ui/checkin_index.html", _context(contributor, kinds=active_kinds()))
 
 
 def _initial(kind, form_class, supersedes, now):
@@ -127,7 +135,7 @@ def _login_or_403(view):
 
 @_login_or_403
 def checkin(request, kind):
-    if kind not in KINDS:
+    if kind not in active_kinds():  # unknown, or its module is off
         raise Http404
     label, form_class = KINDS[kind]
     model = form_class._meta.model
@@ -184,7 +192,7 @@ def recent_records(contributor, days=RECENT_DAYS, now=None):
     """[(kind, label, [(record, when)])] of current records from the last `days` days, newest first."""
     since = (now or timezone.now()) - datetime.timedelta(days=days)
     out = []
-    for kind, (label, form_class) in KINDS.items():
+    for kind, (label, form_class) in active_kinds().items():
         model = form_class._meta.model
         rows = model.objects.current().filter(contributor=contributor)
         if model is DailySnapshot:
@@ -256,6 +264,25 @@ def api_recent(request, contributor):
         groups.append({"kind": kind, "label": label,
                        "records": [{"cid": r.cid, "when": when, "summary": str(r)} for r, when in items]})
     return {"recent": groups}
+
+
+@login_required
+def modules_page(request):
+    """List the installed modules and switch them on or off (POST, CSRF-protected)."""
+    contributor = contributor_for(request.user)
+    reg = registry()
+    if request.method == "POST":
+        module_id = request.POST.get("module_id", "")
+        if module_id not in reg:
+            raise Http404
+        on = request.POST.get("enabled") == "1"
+        ModuleSetting.objects.update_or_create(module_id=module_id, defaults={"enabled": on})
+        messages.success(request, f"{reg[module_id]['name']} turned {'on' if on else 'off'}. "
+                                  "Its records are kept either way.")
+        return redirect("ui:modules")
+    enabled = enabled_ids()
+    rows = [{"m": m, "on": mid in enabled} for mid, m in reg.items()]
+    return render(request, "ui/modules.html", _context(contributor, rows=rows))
 
 
 STATIC_SHELL = ["ui/app.css", "ui/offline.js", "ui/icon-192.png", "ui/icon-512.png"]

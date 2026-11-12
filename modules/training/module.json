@@ -1,0 +1,17 @@
+{
+  "id": "training",
+  "name": "Training log",
+  "version": "1.0.0",
+  "description": "Strength and conditioning sessions and sets (RP-style); weekly volume, RIR, deloads and joint-pain stop signals.",
+  "reads": [
+    {"kind": "training_session", "category": "training"},
+    {"kind": "training_set", "category": "training"}
+  ],
+  "writes": [
+    {"kind": "training_session", "category": "training"},
+    {"kind": "training_set", "category": "training"}
+  ],
+  "compute": {"profile": "on-demand", "hint": "cpu"},
+  "shares": [],
+  "ui": {"checkins": [], "home": ["training_stops"], "charts": []}
+}

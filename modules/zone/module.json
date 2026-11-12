@@ -1,0 +1,22 @@
+{
+  "id": "zone",
+  "name": "Work and zone",
+  "version": "1.0.0",
+  "description": "Work blocks, discomfort checks and resets; weekly focus share, zone flag, reset effect and stop signals.",
+  "reads": [
+    {"kind": "work_block", "category": "work"},
+    {"kind": "discomfort_check", "category": "discomfort"},
+    {"kind": "reset", "category": "work"},
+    {"kind": "probe_session", "category": "probes"},
+    {"kind": "weekly_check", "category": "wellbeing"}
+  ],
+  "writes": [
+    {"kind": "work_block", "category": "work"},
+    {"kind": "discomfort_check", "category": "discomfort"},
+    {"kind": "reset", "category": "work"}
+  ],
+  "compute": {"profile": "on-demand", "hint": "cpu"},
+  "shares": [],
+  "ui": {"checkins": ["work", "discomfort", "reset"], "home": ["zone_flag", "discomfort_stops"],
+         "charts": ["work", "discomfort"]}
+}

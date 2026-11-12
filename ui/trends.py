@@ -11,11 +11,14 @@ from core.services.zone_report import block_dict, check_dict
 from twin_metrics import probes, zone
 from twin_metrics.svg import bar_chart, line_chart
 
+from .modules import enabled_ids, is_on
 
-def chart(title, points, source, unit="", band=None, kind="line"):
-    """One chart: its data (for the API) and its SVG (for the page)."""
+
+def chart(title, points, source, unit="", band=None, kind="line", group="core"):
+    """One chart: its data (for the API) and its SVG (for the page). `group` ties it to a module."""
     draw = bar_chart(title, points, unit) if kind == "bar" else line_chart(title, points, unit, band=band)
-    return {"title": title, "source": source, "points": points, "unit": unit, "band": band, "svg": draw}
+    return {"title": title, "source": source, "points": points, "unit": unit, "band": band, "svg": draw,
+            "group": group}
 
 
 def _days(start_day, end_day):
@@ -36,7 +39,15 @@ def _label(d):
     return d.strftime("%d %b")
 
 
-def build(contributor, weeks=4, today=None):
+def build(contributor, weeks=4, today=None, enabled=None):
+    """Charts for the period; charts of disabled modules are left out."""
+    enabled = enabled_ids() if enabled is None else enabled
+    data = _build(contributor, weeks, today, enabled)
+    data["charts"] = [c for c in data["charts"] if is_on("charts", c["group"], enabled)]
+    return data
+
+
+def _build(contributor, weeks, today, enabled):
     tz = contributor.tzinfo
     today = today or timezone.now().astimezone(tz).date()
     last_monday = today - datetime.timedelta(days=today.weekday())
@@ -72,7 +83,7 @@ def build(contributor, weeks=4, today=None):
         chart("Body fat (pre-session readings only)", daily("body_fat_pct", True), pre, "%"),
     ]
 
-    for kind in SCORED_KINDS:
+    for kind in (SCORED_KINDS if is_on("charts", "probes", enabled) else ()):
         sessions = current_sessions(contributor, kind)
         window = baseline_window(contributor, kind, sessions)
         metric, _ = probes.METRICS[kind][0]  # accuracy_pct for every scored kind
@@ -87,7 +98,7 @@ def build(contributor, weeks=4, today=None):
                 band = (mean - sd, mean + sd)
         note = "shaded: baseline mean +/- 1 SD" if band else "no usable baseline yet"
         charts.append(chart(f"Probe {kind}: rolling median accuracy (last 3 sessions)", points,
-                            f"Probe sessions ({kind}), current records; {note}", "%", band=band))
+                            f"Probe sessions ({kind}), current records; {note}", "%", band=band, group="probes"))
 
     lookback = start - datetime.timedelta(weeks=zone.PRIOR_WEEKS)
     blocks = [block_dict(b) for b in WorkBlock.objects.current().filter(
@@ -97,9 +108,9 @@ def build(contributor, weeks=4, today=None):
     share = [(_label(m), None if m not in weekly or weekly[m]["focus_share"] is None
               else round(100 * weekly[m]["focus_share"], 1)) for m in mondays]
     wsrc = "Work blocks (current records), local weeks starting Monday"
-    charts.append(chart("Weekly work hours", hours, wsrc, "h", kind="bar"))
+    charts.append(chart("Weekly work hours", hours, wsrc, "h", kind="bar", group="work"))
     charts.append(chart("Weekly focus share", share, wsrc + "; high focus = absorption >= 4 and interruptions <= 1",
-                        "%"))
+                        "%", group="work"))
 
     checks = [check_dict(c) for c in DiscomfortCheck.objects.current().filter(
         contributor=contributor, at__gte=start, at__lt=end)]
@@ -108,14 +119,15 @@ def build(contributor, weeks=4, today=None):
     for area in areas:
         pts = [(_label(m), disc[m]["mean_score"].get(area) if m in disc else None) for m in mondays]
         charts.append(chart(f"Discomfort: {area.replace('_', ' ')} (weekly mean, 0-10)", pts,
-                            "Discomfort checks (current records)"))
+                            "Discomfort checks (current records)", group="discomfort"))
     if not areas:
-        charts.append(chart("Discomfort by area", [], "Discomfort checks (current records): none in this period"))
+        charts.append(chart("Discomfort by area", [], "Discomfort checks (current records): none in this period",
+                            group="discomfort"))
     return {"weeks": weeks, "first_day": first_day, "today": today, "charts": charts}
 
 
 def as_data(trends):
     """The same charts as plain data (for /api/v0/trends): title, source, points, unit, band."""
-    keep = ("title", "source", "points", "unit", "band")
+    keep = ("title", "source", "points", "unit", "band", "group")
     return {"weeks": trends["weeks"], "first_day": trends["first_day"], "today": trends["today"],
             "charts": [{k: c[k] for k in keep} for c in trends["charts"]]}

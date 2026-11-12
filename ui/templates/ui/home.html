@@ -30,8 +30,11 @@
     <dt>Probe: {{ p.kind }}</dt>
     <dd><span class="flag flag-{{ p.flag }}">{{ p.flag }}</span>{% if p.reasons %} <span class="why">{{ p.reasons|join:"; " }}</span>{% endif %}</dd>
     {% endfor %}
+    {% if t.zone %}
     <dt>Zone (this week)</dt>
     <dd><span class="flag flag-{{ t.zone.flag|slugify }}">{{ t.zone.flag }}</span> <span class="why">{{ t.zone.detail }}</span></dd>
+    {% endif %}
+    {% if not t.probes and not t.zone %}<dd class="note">No flag modules are on. <a href="{% url 'ui:modules' %}">Modules</a></dd>{% endif %}
   </dl>
 </section>
 {% endblock %}

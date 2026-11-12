@@ -1,0 +1,15 @@
+{
+  "id": "probes",
+  "name": "Probes",
+  "version": "1.0.0",
+  "description": "Cognitive probes: puzzle sets, rapid games and mini-puzzles; baselines, rolling medians and amber/red flags.",
+  "reads": [
+    {"kind": "probe_session", "category": "probes"},
+    {"kind": "daily_snapshot", "category": "sleep"},
+    {"kind": "work_block", "category": "work"}
+  ],
+  "writes": [{"kind": "probe_session", "category": "probes"}],
+  "compute": {"profile": "on-demand", "hint": "cpu"},
+  "shares": [],
+  "ui": {"checkins": ["probe"], "home": ["probe_flags"], "charts": ["probes"]}
+}

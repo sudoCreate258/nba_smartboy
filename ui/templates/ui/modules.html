@@ -1,0 +1,25 @@
+{% extends "ui/base.html" %}
+{% block title %}Modules - Twin{% endblock %}
+{% block content %}
+<h1>Modules</h1>
+<p class="note">Each feature is a module. Turning one off hides its check-ins, home sections and charts. Its records stay stored, with their history, and stay in "Download my data". Per-category sharing permissions arrive in M5.</p>
+{% for row in rows %}
+<section class="module" aria-labelledby="mod-{{ row.m.id }}">
+  <h2 id="mod-{{ row.m.id }}">{{ row.m.name }} <span class="flag{% if not row.on %} flag-amber{% endif %}">{% if row.on %}on{% else %}off{% endif %}</span></h2>
+  <p>{{ row.m.description }}</p>
+  <dl class="flags">
+    <dt>Reads</dt><dd>{% for r in row.m.reads %}{{ r.kind }} ({{ r.category }}){% if not forloop.last %}, {% endif %}{% endfor %}</dd>
+    <dt>Writes</dt><dd>{% for r in row.m.writes %}{{ r.kind }} ({{ r.category }}){% if not forloop.last %}, {% endif %}{% empty %}nothing{% endfor %}</dd>
+    <dt>Compute</dt><dd>{{ row.m.compute.profile }}</dd>
+    <dt>Shares</dt><dd>{% for r in row.m.shares %}{{ r.kind }} ({{ r.category }}){% if not forloop.last %}, {% endif %}{% empty %}nothing{% endfor %}</dd>
+    <dt>Version</dt><dd>{{ row.m.version }}</dd>
+  </dl>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="module_id" value="{{ row.m.id }}">
+    <input type="hidden" name="enabled" value="{% if row.on %}0{% else %}1{% endif %}">
+    <button type="submit" class="primary">Turn {{ row.m.name|lower }} {% if row.on %}off{% else %}on{% endif %}</button>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

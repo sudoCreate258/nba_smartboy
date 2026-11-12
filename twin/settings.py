@@ -42,6 +42,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "core",
     "ui",
+    # UI modules (each ships a module.json manifest; ui/modules.py is the registry).
+    "modules.probes",
+    "modules.zone",
+    "modules.training",
 ]
 
 MIDDLEWARE = [
