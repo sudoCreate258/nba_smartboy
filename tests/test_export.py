@@ -72,8 +72,9 @@ def wipe():
     """Simulate a fresh database (records are immutable, so bypass the model guards)."""
     from django.db import connection
     with connection.cursor() as cur:
-        for model in RECORD_MODELS + [Supersession]:
-            cur.execute(f'DELETE FROM "{model._meta.db_table}"')
+        # Record tables refuse DELETE (M6 triggers); TRUNCATE is the database owner's tool.
+        cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        cur.execute("TRUNCATE " + ", ".join(f'"{m._meta.db_table}"' for m in RECORD_MODELS + [Supersession]))
 
 
 def test_export_lines_are_self_verifying(mike):

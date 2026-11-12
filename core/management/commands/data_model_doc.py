@@ -90,7 +90,9 @@ skipped by a daylight-saving change are rejected on import.
 
 - Every record type below is a `ProvenancedRecord`: it has a `contributor` and a `cid`, and it is
   immutable once saved (`save()` on a stored record, queryset `update()` and `delete()` all raise
-  `ImmutableRecordError`).
+  `ImmutableRecordError`). The database enforces it too: row triggers refuse UPDATE and DELETE on
+  every record table, `core_supersession` and the ledger tables (migrations `core/0016`,
+  `ledger/0002`).
 - **CID** = CIDv1, raw codec (0x55), sha2-256, base32 lower case without padding (`bafkrei...`),
   over canonical JSON bytes: `{"contributor": <handle>, "fields": {...}, "kind": <record kind>}`
   with sorted keys, compact separators and UTF-8 (`nymbus/provenance.py`).

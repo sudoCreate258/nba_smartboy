@@ -204,9 +204,8 @@ def test_restore_asks_before_replacing_any_data_not_only_records(mike, remote, m
     for model in (DiscomfortCheck,):
         pass
     with connection.cursor() as cur:
-        for table in ("core_trainingset", "core_trainingsession", "core_reset", "core_weeklycheck", "core_workblock",
-                      "core_discomfortcheck", "core_probesession", "core_dailysnapshot", "core_supersession"):
-            cur.execute(f'DELETE FROM "{table}"')
+        cur.execute("TRUNCATE core_trainingset, core_trainingsession, core_reset, core_weeklycheck, core_workblock, "
+                    "core_discomfortcheck, core_probesession, core_dailysnapshot, core_supersession")
     get_user_model().objects.create_user("owner", password="a-long-test-password")  # live data that is not a record
     with pytest.raises(CommandError, match="already has data .*auth_user"):
         call_command("restore_backup", "--set", "latest", stdout=StringIO())

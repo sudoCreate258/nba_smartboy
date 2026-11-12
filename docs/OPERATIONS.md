@@ -153,6 +153,10 @@ docker compose start web
 
 Check a restore: `docker compose exec web python manage.py showmigrations core` lists every migration as applied, and the reports show the expected records. To test a backup without touching the live data, restore it into a scratch database (`createdb -U twin twin_restore_check`, the `psql -f` step with `-d twin_restore_check`, compare row counts, then `dropdb -U twin twin_restore_check`).
 
+## Records cannot be changed, even with SQL
+
+Every record table, the corrections (`core_supersession`) and the ledger tables refuse UPDATE and DELETE in the database itself (row triggers, M6). A mistake is fixed with a correction (a new record), never by editing. **There is no supported bypass for normal use.** What still works: inserts, a restore (it replaces whole tables), and `docker compose down -v` (deletes the database). Switching a trigger off (`ALTER TABLE ... DISABLE TRIGGER`) is a database-owner action outside normal use; any row changed that way no longer matches its CID, and `verify_ledger`, the backup verify and the import all report it.
+
 ## Upgrading
 
 ```powershell

@@ -57,5 +57,5 @@ simulated recipient -> ledger.service.simulated_read
 - **Configuration:** settings come from `.env` (gitignored). `DJANGO_SECRET_KEY` is required unless `DJANGO_DEBUG=1`; Compose refuses to start without `POSTGRES_PASSWORD`.
 - **Access:** one login per instance, rate-limited; the app acts as the single contributor `TWIN_CONTRIBUTOR`.
 - **Repository:** public. Test fixtures are synthetic. Real exports stay in `data/inbox/` (gitignored). The CI token is read-only.
-- **Immutability:** records are immutable in the model layer; ledger tables also in the database (triggers). The database owner can still TRUNCATE or DROP; record tables have no trigger yet (planned (M6)).
+- **Immutability:** records, Supersession and the ledger are immutable in the model layer and in the database (row triggers refuse UPDATE and DELETE, M6). The database owner can still TRUNCATE, DROP or switch a trigger off; the CID checks and `verify_ledger` show such edits.
 - **Not yet:** encryption at rest on the local disk (the owner's disk encryption), HTTPS for LAN mode (M6).
