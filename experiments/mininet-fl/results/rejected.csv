@@ -1,0 +1,2 @@
+# first run of this configuration: tc shaping evidently not applied (0.05 s/round for 33 MB at 100 Mbit/s); replaced by a re-run
+linux-bridge,16,star,100,20,1000000,3,100343614,100344744,0.047363599141438804,9.88514494895935

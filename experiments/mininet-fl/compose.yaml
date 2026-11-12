@@ -1,0 +1,12 @@
+# Experiment E1 (024): its own Compose project, not part of the app or its gate.
+#   docker compose -f experiments/mininet-fl/compose.yaml run --rm lab [fl_lab.py options]
+# --privileged is needed by Mininet (network namespaces, tc, bridges). This container is the only
+# exception allowed; it mounts nothing but results/, has no secrets and is removed after each run (--rm).
+name: mininet-fl
+services:
+  lab:
+    build: .
+    image: mininet-fl:local
+    privileged: true
+    volumes:
+      - ./results:/results
