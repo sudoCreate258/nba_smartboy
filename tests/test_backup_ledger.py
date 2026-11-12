@@ -54,6 +54,14 @@ def test_a_manifest_head_that_does_not_match_the_export_fails(mike, tmp_path):
     manifest["ledger_heads"]["mike"]["events"] = 2
     with pytest.raises(runner.BackupError, match="ledger head of mike in the manifest does not match"):
         runner.verify_restore(folder, manifest, scratch="twin_verify_head")
+    manifest["ledger_heads"]["mike"]["events"] = 3
+    manifest["ledger_heads"]["mike"]["revocations"] = 0  # review fix: grant/revocation counts are checked too
+    with pytest.raises(runner.BackupError, match="ledger head of mike in the manifest does not match"):
+        runner.verify_restore(folder, manifest, scratch="twin_verify_head2")
+    manifest["ledger_heads"]["mike"]["revocations"] = 1
+    manifest["ledger_heads"].pop("mike")  # every exported contributor needs a head
+    with pytest.raises(runner.BackupError, match="cover exactly the exported contributors"):
+        runner.verify_restore(folder, manifest, scratch="twin_verify_head3")
     del manifest["ledger_heads"]  # sets from before M6 have no heads and still verify
     assert runner.verify_restore(folder, manifest, scratch="twin_verify_nohead") == 14 + 6
 

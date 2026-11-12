@@ -28,11 +28,24 @@ def test_dependabot_targets_develop_weekly_for_pip_and_actions():
 
 def test_update_script_pulls_rebuilds_migrates_and_runs_the_gate():
     text = read("scripts/update.ps1")
-    steps = ["git pull --ff-only", "docker compose build --pull web", "docker compose up -d web",
-             "manage.py migrate", "scripts/ci-local.ps1"]
+    # Review fix: validate the new image before anything running changes, then migrate, then switch.
+    steps = ["git status --porcelain", "git pull --ff-only", "docker tag twin-web:local twin-web:previous",
+             "docker compose build --pull web", "scripts/ci-local.ps1", "docker compose run --rm -T web python manage.py migrate",
+             "up -d --no-build @running"]
     positions = [text.index(s) for s in steps]
     assert positions == sorted(positions)
-    assert "uncommitted changes" in text
+    assert '"web-https"' in text and "--profile\", \"https\"" in text  # the HTTPS service is updated too
+    compose = read("docker-compose.yml")
+    assert compose.count("image: twin-web:local") == 3  # one shared image for web, web-https and backup
+
+
+def test_the_ca_key_stays_out_of_every_container():
+    """Review fix: the whole repository is mounted at /app, so the CA lives outside it and certs/ is masked."""
+    compose = read("docker-compose.yml")
+    assert compose.count("- /app/certs") == compose.count("- .:/app") == 3
+    ps1 = read("scripts/lan-cert.ps1")
+    assert ".twin-ca" in ps1 and "CaDir is inside the repository" in ps1
+    assert "./certs/server:/run/secrets/tls:ro" in compose and "certs/ca" not in compose
 
 
 def test_no_third_party_images_and_no_docker_socket_anywhere():

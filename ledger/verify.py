@@ -38,19 +38,41 @@ def newest_anchor():
     return None, {}
 
 
+HEAD_KEYS = {"events", "last_hash", "grants", "revocations"}
+
+
+def head_problem(anchor):
+    """Why an anchored head is malformed, or None. Exactly the four keys; counts are integers >= 0;
+    last_hash is 64 lowercase hex characters."""
+    if not isinstance(anchor, dict) or set(anchor) != HEAD_KEYS:
+        return "a ledger head must have exactly events, last_hash, grants and revocations"
+    for key in ("events", "grants", "revocations"):
+        if not isinstance(anchor[key], int) or isinstance(anchor[key], bool) or anchor[key] < 0:
+            return f"ledger head {key} must be a whole number >= 0"
+    h = anchor["last_hash"]
+    if not (isinstance(h, str) and len(h) == 64 and all(c in "0123456789abcdef" for c in h)):
+        return "ledger head last_hash must be 64 lowercase hex characters"
+    if anchor["events"] == 0 and h != ledger.GENESIS:
+        return "a ledger head with no events must have the genesis hash"
+    return None
+
+
 def compare_head(contributor, anchor, where="the backup"):
-    """Problems when the live ledger is shorter than, or differs from, an anchored head. A longer live
-    ledger is fine as long as it extends the anchored one."""
-    if not isinstance(anchor, dict):
-        return []
+    """Problems when the live ledger is shorter than, or differs from, an anchored head (a malformed head
+    is a problem too). A longer live ledger is fine as long as it extends the anchored one."""
+    bad = head_problem(anchor)
+    if bad:
+        return [f"{contributor}: {where}: {bad}"]
     problems = []
-    events = list(AccessEvent.objects.filter(contributor=contributor).order_by("seq"))
-    anchored = anchor.get("events", 0)
-    if len(events) < anchored:
-        problems.append(f"{contributor}: the ledger is shorter than in {where}: {len(events)} access events, "
+    events = AccessEvent.objects.filter(contributor=contributor)
+    live, anchored = events.count(), anchor["events"]
+    if live < anchored:
+        problems.append(f"{contributor}: the ledger is shorter than in {where}: {live} access events, "
                         f"{where} had {anchored} (events were removed)")
-    elif anchored and ledger.digest(events[anchored - 1].canonical()) != anchor.get("last_hash"):
-        problems.append(f"{contributor}: access event {anchored} differs from {where} (the chain was rewritten)")
+    elif anchored:
+        at = events.filter(seq=anchored).first()
+        if at is None or ledger.digest(at.canonical()) != anchor["last_hash"]:
+            problems.append(f"{contributor}: access event {anchored} differs from {where} (the chain was rewritten)")
     for kind, model in (("grants", Grant), ("revocations", Revocation)):
         live = model.objects.filter(contributor=contributor).count()
         if live < anchor.get(kind, 0):

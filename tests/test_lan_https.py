@@ -28,7 +28,7 @@ def _free_port():
 @pytest.fixture(scope="module")
 def certs(tmp_path_factory):
     out = tmp_path_factory.mktemp("certs")
-    result = subprocess.run(["sh", str(ROOT / "scripts" / "lan-cert.sh"), "127.0.0.1", str(out)],
+    result = subprocess.run(["sh", str(ROOT / "scripts" / "lan-cert.sh"), "127.0.0.1", str(out / "ca"), str(out / "server")],
                             capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr
     assert "created a new local CA" in result.stdout
@@ -44,11 +44,11 @@ def test_certificate_script_output(certs):
     assert verify.returncode == 0, verify.stdout + verify.stderr
     # Re-running keeps the CA (the phone keeps trusting it) and renews only the server certificate.
     ca_before = (certs / "ca" / "twin-ca.crt").read_bytes()
-    again = subprocess.run(["sh", str(ROOT / "scripts" / "lan-cert.sh"), "192.168.1.20", str(certs)],
+    again = subprocess.run(["sh", str(ROOT / "scripts" / "lan-cert.sh"), "192.168.1.20", str(certs / "ca"), str(certs / "server")],
                            capture_output=True, text=True, timeout=120)
     assert "reusing the existing local CA" in again.stdout
     assert (certs / "ca" / "twin-ca.crt").read_bytes() == ca_before
-    subprocess.run(["sh", str(ROOT / "scripts" / "lan-cert.sh"), "127.0.0.1", str(certs)], check=True,
+    subprocess.run(["sh", str(ROOT / "scripts" / "lan-cert.sh"), "127.0.0.1", str(certs / "ca"), str(certs / "server")], check=True,
                    capture_output=True, timeout=120)
 
 

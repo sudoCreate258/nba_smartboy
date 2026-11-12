@@ -31,6 +31,7 @@ from django.utils import timezone
 from core.models import Contributor, Supersession
 from core.services.export import EXPORT_MODELS, LEDGER_MODELS, RECORD_MODELS, export_lines, verify_line
 from ledger.verify import head as ledger_head
+from ledger.verify import head_problem
 from nymbus import ledger
 from nymbus.provenance import canonical_bytes
 
@@ -244,11 +245,13 @@ def compare_with_exports(dbname, folder, manifest):
     exported = {m.record_kind: set() for m in EXPORT_MODELS}
     exported_events = set()
     chains = {}  # contributor -> access_event lines, to re-link the hash chain from the set itself
+    ledger_counts, exported_contributors = {}, set()
     for name in manifest["exports"]:
         with open(folder / name, encoding="utf-8") as fh:
             header = json.loads(fh.readline())
             if header.get("type") != "export" or header.get("format") != "nymbus-jsonl":
                 raise BackupError(f"verify: {name} does not start with a nymbus-jsonl header")
+            exported_contributors.add(header.get("contributor"))
             for number, line in enumerate(fh, start=2):
                 item = json.loads(line)
                 if item.get("type") == "record":
@@ -257,6 +260,9 @@ def compare_with_exports(dbname, folder, manifest):
                     exported[item["kind"]].add(item["cid"])
                     if item["kind"] == "access_event":
                         chains.setdefault(item["contributor"], []).append(item)
+                    elif item["kind"] in ("grant", "revocation"):
+                        per = ledger_counts.setdefault(item["contributor"], {"grant": 0, "revocation": 0})
+                        per[item["kind"]] += 1
                 elif item.get("type") == "supersession":
                     exported_events.add((item["old_cid"], item["new_cid"]))
     for kind, cids in restored.items():
@@ -271,11 +277,20 @@ def compare_with_exports(dbname, folder, manifest):
                                      for i in items])
         if broken:
             raise BackupError(f"verify: the ledger hash chain of {handle} is broken: {'; '.join(broken)}")
-    for handle, head in (manifest.get("ledger_heads") or {}).items():  # sets from before M6 have none
-        items = chains.get(handle, [])
-        last = ledger.digest(canonical_bytes("access_event", handle, items[-1]["fields"])) if items else ledger.GENESIS
-        if head.get("events") != len(items) or head.get("last_hash") != last:
-            raise BackupError(f"verify: the ledger head of {handle} in the manifest does not match the export")
+    if "ledger_heads" in manifest:  # sets from before M6 have none
+        heads = manifest["ledger_heads"]
+        if not isinstance(heads, dict) or set(heads) != exported_contributors:
+            raise BackupError("verify: the manifest's ledger heads must cover exactly the exported contributors")
+        for handle, head in heads.items():
+            bad = head_problem(head)
+            if bad:
+                raise BackupError(f"verify: the ledger head of {handle}: {bad}")
+            items = chains.get(handle, [])
+            per = ledger_counts.get(handle, {"grant": 0, "revocation": 0})
+            last = ledger.digest(canonical_bytes("access_event", handle, items[-1]["fields"])) if items else ledger.GENESIS
+            if (head["events"], head["last_hash"], head["grants"], head["revocations"]) != (
+                    len(items), last, per["grant"], per["revocation"]):
+                raise BackupError(f"verify: the ledger head of {handle} in the manifest does not match the export")
     recorded = manifest["record_counts"].get("supersession")  # sets from before this field existed have none
     if restored_events != exported_events or (recorded is not None and len(restored_events) != recorded):
         raise BackupError("verify: corrections (supersession events) in the restored dump differ from the export")

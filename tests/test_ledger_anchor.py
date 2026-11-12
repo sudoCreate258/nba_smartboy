@@ -120,3 +120,15 @@ def test_statement_page_shows_the_head_and_the_anchor(client, mike):
     owner_sql("DELETE FROM ledger_accessevent WHERE seq = 3")
     html = client.get(reverse("ui:statement")).content.decode()
     assert 'role="alert"' in html and "shorter than in the backup" in html
+
+
+@pytest.mark.parametrize("bad", ["bad", {"events": 3}, {"events": -1, "last_hash": "0" * 64, "grants": 0, "revocations": 0},
+                                 {"events": 3, "last_hash": "XYZ", "grants": 2, "revocations": 1},
+                                 {"events": 0, "last_hash": "a" * 64, "grants": 0, "revocations": 0},
+                                 {"events": True, "last_hash": "0" * 64, "grants": 0, "revocations": 0}])
+def test_a_malformed_head_is_a_problem_not_a_match(mike, tmp_path, bad):
+    """Review fix: a malformed anchor used to be read as 'matching'."""
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps({"ledger_heads": {"mike": bad}}), encoding="utf-8")
+    with pytest.raises(CommandError, match="ledger head"):
+        run("--manifest", str(path))

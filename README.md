@@ -154,15 +154,15 @@ Logging out deletes the pages saved on the device. Check-ins not yet sent stay o
 **LAN HTTPS (recommended for the phone):** you create a small certificate authority (CA) of your own, the phone trusts it, and the twin serves `https://<address>:8443/` with a certificate from it. The CA's private key stays on this computer.
 1. Create the CA and the server certificate (once; again only if the address changes):
    `powershell -File scripts/lan-cert.ps1 -LanHost 192.168.1.20`
-   It writes `certs/` (gitignored, never copied into the image) and prints the CA's SHA-256 fingerprint. Keep `certs/ca/ca.key` private; never send it anywhere.
+   The CA goes to `%USERPROFILE%\.twin-ca` (outside the repository, so no container can read it; `-CaDir` picks another folder outside it), the server certificate to `certs/server/` (gitignored, never in the image, mounted read-only into the HTTPS service only). It prints the CA's SHA-256 fingerprint. Keep `ca.key` private; never send it anywhere.
 2. In `.env`: leave `TWIN_LAN_HOST` empty (the plain port stays on this computer) and set `TWIN_HTTPS_HOST=192.168.1.20`. Start it: `docker compose --profile https up -d web-https`.
-3. Copy **only** `certs/ca/twin-ca.crt` to the phone (USB, or an email to yourself) and trust it:
+3. Copy **only** `twin-ca.crt` from the CA folder to the phone (USB, or an email to yourself) and trust it:
    - **Android:** Settings > Security (or "Security & privacy") > More > Encryption & credentials > Install a certificate > CA certificate, pick `twin-ca.crt`. Chrome then trusts the twin.
    - **iPhone/iPad:** open `twin-ca.crt` (Files or Mail) > Settings > General > VPN & Device Management > install the profile; then Settings > General > About > Certificate Trust Settings > turn on full trust for "Twin local CA".
    Check that the fingerprint shown on the phone matches the one the script printed.
 4. Open `https://192.168.1.20:8443/` on the phone, log in, and "Add to Home screen".
 - The HTTPS server sends HSTS for a year: once the phone has seen it, it will only use HTTPS for that address. To go back to plain LAN mode, clear the browser's site data for the address.
-- To stop trusting it: remove the certificate on the phone and delete `certs/`.
+- To stop trusting it: remove the certificate on the phone and delete the CA folder and `certs/`.
 
 ## Stop
 
