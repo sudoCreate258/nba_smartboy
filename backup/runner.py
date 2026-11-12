@@ -149,39 +149,69 @@ def _admin_conn(db):
                            dbname="postgres", autocommit=True)
 
 
+def restore_dump(dbname, dump, clean=False):
+    """pg_restore the dump into database `dbname` (clean=True replaces existing objects)."""
+    db = _db()
+    cmd = ["pg_restore", "--no-owner", "--no-privileges", "--exit-on-error", "-h", db["host"], "-p", db["port"],
+           "-U", db["user"], "-d", dbname]
+    if clean:
+        cmd += ["--clean", "--if-exists"]
+    _run(cmd + [str(dump)], _pg_env(db))
+
+
+def compare_with_exports(dbname, folder, manifest):
+    """Every export line self-verifies, and the record CIDs in `dbname` equal the exports' and the manifest counts.
+    Returns the number of records checked."""
+    folder, db = Path(folder), _db()
+    restored = {}
+    with psycopg.connect(host=db["host"], port=db["port"], user=db["user"], password=db["password"],
+                         dbname=dbname) as conn:
+        for model in RECORD_MODELS:
+            rows = conn.execute(f'SELECT cid FROM "{model._meta.db_table}"').fetchall()
+            restored[model.record_kind] = {r[0] for r in rows}
+    exported = {m.record_kind: set() for m in RECORD_MODELS}
+    for name in manifest["exports"]:
+        with open(folder / name, encoding="utf-8") as fh:
+            for number, line in enumerate(fh, start=1):
+                item = json.loads(line)
+                if item.get("type") != "record":
+                    continue
+                if not verify_line(item):
+                    raise BackupError(f"verify: {name} line {number}: CID does not match its content")
+                exported[item["kind"]].add(item["cid"])
+    for kind, cids in restored.items():
+        if cids != exported[kind]:
+            raise BackupError(f"verify: {kind} CIDs in the restored dump differ from the export")
+        if len(cids) != manifest["record_counts"].get(kind):
+            raise BackupError(f"verify: {kind} count differs from the manifest")
+    return sum(len(c) for c in restored.values())
+
+
 def verify_restore(folder, manifest, scratch):
     """Restore the dump into a scratch database and compare it with the exports; drops the scratch database."""
-    folder, db = Path(folder), _db()
+    db = _db()
     with _admin_conn(db) as conn:
         conn.execute(f'DROP DATABASE IF EXISTS "{scratch}" WITH (FORCE)')
         conn.execute(f'CREATE DATABASE "{scratch}"')
     try:
-        _run(["pg_restore", "--no-owner", "--no-privileges", "--exit-on-error", "-h", db["host"], "-p", db["port"],
-              "-U", db["user"], "-d", scratch, str(folder / DUMP)], _pg_env(db))
-        restored = {}
-        with psycopg.connect(host=db["host"], port=db["port"], user=db["user"], password=db["password"],
-                             dbname=scratch) as conn:
-            for model in RECORD_MODELS:
-                rows = conn.execute(f'SELECT cid FROM "{model._meta.db_table}"').fetchall()
-                restored[model.record_kind] = {r[0] for r in rows}
-        exported = {m.record_kind: set() for m in RECORD_MODELS}
-        for name in manifest["exports"]:
-            with open(folder / name, encoding="utf-8") as fh:
-                for number, line in enumerate(fh, start=1):
-                    item = json.loads(line)
-                    if item.get("type") != "record":
-                        continue
-                    if not verify_line(item):
-                        raise BackupError(f"verify: {name} line {number}: CID does not match its content")
-                    exported[item["kind"]].add(item["cid"])
-        for kind, cids in restored.items():
-            if cids != exported[kind]:
-                raise BackupError(f"verify: {kind} CIDs in the restored dump differ from the export")
-            if len(cids) != manifest["record_counts"].get(kind):
-                raise BackupError(f"verify: {kind} count differs from the manifest")
+        restore_dump(scratch, Path(folder) / DUMP)
+        return compare_with_exports(scratch, folder, manifest)
     finally:
         with _admin_conn(db) as conn:
             conn.execute(f'DROP DATABASE IF EXISTS "{scratch}" WITH (FORCE)')
+
+
+def download_set(name, folder, remote=None, config=None):
+    """Download set `name` (or "latest") through the crypt remote into `folder`; returns the set name."""
+    remote = remote if remote is not None else settings.BACKUP_REMOTE
+    config = config if config is not None else os.environ.get("RCLONE_CONFIG", "")
+    if name == "latest":
+        sets = sorted(n for n in list_sets(remote, config) if retention.parse_set_name(n))
+        if not sets:
+            raise BackupError("there are no backup sets on the remote")
+        name = sets[-1]
+    rclone(["copy", f"{remote}sets/{name}", str(folder)], config)
+    return name
 
 
 # --- the run ---------------------------------------------------------------------------------
