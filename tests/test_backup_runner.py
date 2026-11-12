@@ -11,9 +11,19 @@ from core.models import Contributor
 from tests.backup_helpers import crypt_remote
 from tests.test_export import seed
 
-pytestmark = pytest.mark.django_db(transaction=True, serialized_rollback=True)
+# pg_dump reads committed data, so these tests commit (transaction=True); the database is
+# flushed after each one, which also removes the 'mike' contributor the data migration created.
+pytestmark = pytest.mark.django_db(transaction=True)
 UTC = datetime.timezone.utc
 NOW = datetime.datetime(2026, 11, 12, 7, 30, tzinfo=UTC)  # 02:30 New York
+
+
+@pytest.fixture(scope="module", autouse=True)
+def restore_migration_data(django_db_blocker):
+    """Put the data migration's contributor back after the last test here, for the tests that follow."""
+    yield
+    with django_db_blocker.unblock():
+        Contributor.objects.get_or_create(handle="mike", defaults={"timezone": "America/New_York"})
 
 
 @pytest.fixture
@@ -23,7 +33,7 @@ def remote(tmp_path):
 
 @pytest.fixture
 def mike():
-    m = Contributor.objects.get(handle="mike")
+    m, _ = Contributor.objects.get_or_create(handle="mike", defaults={"timezone": "America/New_York"})
     seed(m)
     return m
 
