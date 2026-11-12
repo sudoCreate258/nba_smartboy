@@ -1,0 +1,21 @@
+{% extends "ui/base.html" %}
+{% block title %}Revoke - Twin{% endblock %}
+{% block content %}
+<h1>Revoke this grant?</h1>
+<dl class="flags">
+  <dt>Category</dt><dd>{{ category_label }}</dd>
+  <dt>Recipient</dt><dd>{{ recipient }}</dd>
+  <dt>Purpose</dt><dd>{{ g.purpose }}</dd>
+  <dt>Since</dt><dd>{{ g.start|date:"Y-m-d H:i" }}{% if g.end %}, until {{ g.end|date:"Y-m-d H:i" }}{% endif %}</dd>
+</dl>
+<p>From now on, {{ recipient }} can no longer read {{ category_label|lower }}. Reads already made stay in the ledger and on your statement. The grant is kept in history, marked revoked.</p>
+<form method="post" class="stack">
+  {% csrf_token %}
+  <div class="field">
+    <label for="{{ form.reason.id_for_label }}">{{ form.reason.label }}</label>
+    {{ form.reason }}
+  </div>
+  <button type="submit" class="danger">Revoke now</button>
+</form>
+<p><a href="{% url 'ui:permissions' %}#cat-{{ g.category }}">Cancel, keep the grant</a></p>
+{% endblock %}

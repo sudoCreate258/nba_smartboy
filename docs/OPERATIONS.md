@@ -47,7 +47,18 @@ docker compose exec web python manage.py export_my_data --out data/inbox/my-data
 docker compose exec web python manage.py import_my_data data/inbox/my-data.jsonl   # on a fresh instance
 ```
 
-JSON Lines with every record and correction (format: `docs/DATA_MODEL.md`, "Export format"). The app's Recent page has the same "Download my data" button. Import refuses a database that already has records for the contributor, and checks every CID.
+JSON Lines with every record and correction, plus the ledger (grants, revocations, access events) (format: `docs/DATA_MODEL.md`, "Export format"). The app's Recent page has the same "Download my data" button. Import refuses a database that already has records for the contributor, checks every CID and the ledger's hash chain.
+
+## Permissions, reads and the statement (simulated)
+
+Each data category belongs to the core or to a module. On the **Permissions** page you grant a simulated recipient ("Self-analysis" or "Research partner", both simulated) read access to one category, for a stated purpose, optionally until a date; revoking asks for confirmation and takes effect at once. Nothing leaves this computer: a "read" is a local simulation that records which records were read.
+
+```powershell
+docker compose exec web python manage.py ledger_read --recipient sim-research-partner --category probes   # one simulated read (needs a grant)
+docker compose exec web python manage.py verify_ledger    # recompute every CID and the hash chain; non-zero on any break
+```
+
+The **Statement** page shows, per month and category, who read how many records, for what purpose, and the simulated credits (one per record read; not money). "Download statement" gives the same as JSON Lines with the statement's CID. Ledger rows cannot be changed or deleted, even with SQL (database triggers); `verify_ledger` detects edits made by someone who switched the triggers off. Removing the newest events or a revocation leaves a shorter but consistent chain, which only an older export or backup can reveal, so keep the backups running.
 
 ## Phone checklist (manual)
 
@@ -114,7 +125,7 @@ All take `--contributor` (default `mike`) and `--json`; `zone_report` and `train
 
 ## Backup and restore
 
-Backups are manual today; encrypted off-hours backups are planned (M4.5).
+Manual dump and restore, independent of the encrypted backup above (for example before an upgrade).
 
 The dump is written inside the database container and copied out with `docker compose cp`, so the file is byte-exact (PowerShell redirection would re-encode it).
 

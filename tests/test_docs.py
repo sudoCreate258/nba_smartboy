@@ -32,4 +32,5 @@ def test_internal_docs_exist_and_mark_planned_work():
     for name in ("ARCHITECTURE.md", "DATA_MODEL.md", "OPERATIONS.md"):
         assert (ROOT / "docs" / name).is_file(), name
     arch = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
-    assert "planned (M4)" in arch and "planned (M5)" in arch
+    assert "planned (M6)" in arch and "planned (M7)" in arch  # not-yet-built work stays marked
+    assert "after M5" in arch and "Simulated (M5)" in arch  # and what is built is described as built

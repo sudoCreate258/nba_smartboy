@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """'My data' export and import (M4-T6): JSON Lines, the first draft of the Nymbus interchange format.
 
+Since M5 the ledger (grants, revocations, access events) is exported as ordinary record lines
+of kinds grant, revocation and access_event; import checks the access-event hash chain.
+
 Line 1:  {"type": "export", "format": "nymbus-jsonl", "version": 1, "contributor": ..., "timezone": ...,
           "exported_at": ...}
 Records: {"type": "record", "kind": <record kind>, "cid": ..., "contributor": <handle>,
@@ -20,13 +23,17 @@ from django.utils import timezone
 
 from nymbus.provenance import canonical_bytes, compute_cid, normalize_fields
 
+from ledger.models import AccessEvent, Grant, Revocation
+
 from ..models import (Contributor, DailySnapshot, DiscomfortCheck, ProbeSession, ProvenancedRecord, Reset,
                       Supersession, TrainingSession, TrainingSet, WeeklyCheck, WorkBlock)
 
 FORMAT, VERSION = "nymbus-jsonl", 1
 RECORD_MODELS = [DailySnapshot, ProbeSession, WorkBlock, DiscomfortCheck, Reset, WeeklyCheck, TrainingSession,
-                 TrainingSet]
-BY_KIND = {m.record_kind: m for m in RECORD_MODELS}
+                 TrainingSet]  # the owner's data
+LEDGER_MODELS = [Grant, Revocation, AccessEvent]  # who may read it, and every read (M5)
+EXPORT_MODELS = RECORD_MODELS + LEDGER_MODELS
+BY_KIND = {m.record_kind: m for m in EXPORT_MODELS}
 
 
 class ImportError_(Exception):
@@ -42,7 +49,7 @@ def export_lines(contributor, now=None):
     yield json.dumps({"type": "export", "format": FORMAT, "version": VERSION, "contributor": contributor.handle,
                       "timezone": contributor.timezone, "exported_at": _iso(now or timezone.now())}, sort_keys=True)
     events = []
-    for model in RECORD_MODELS:
+    for model in EXPORT_MODELS:
         for r in model.objects.filter(contributor=contributor):
             events.append((r.created_at, 0, r.pk, model.record_kind, r))
     for s in Supersession.objects.filter(contributor=contributor):
@@ -90,7 +97,7 @@ def import_lines(lines):
     with transaction.atomic():
         contributor, created = Contributor.objects.get_or_create(handle=header["contributor"],
                                                                  defaults={"timezone": header["timezone"]})
-        if any(m.objects.filter(contributor=contributor).exists() for m in RECORD_MODELS):
+        if any(m.objects.filter(contributor=contributor).exists() for m in EXPORT_MODELS):
             raise ImportError_(f"contributor {contributor.handle} already has records; import into a fresh database")
         if contributor.timezone != header["timezone"]:
             # No records yet, so local days and weeks are defined by the export's time zone.
@@ -120,6 +127,16 @@ def import_lines(lines):
                 raise ImportError_(f"line {number}: {' '.join(exc.messages)}")
             except Exception as exc:  # database constraint or conversion problem: still a line-numbered error
                 raise ImportError_(f"line {number}: {type(exc).__name__}: {exc}")
+        # Each access event was checked against the one before it as it was replayed. Later lines can
+        # still invalidate earlier ones (a revocation dated before a read it follows), and record
+        # references are only checkable once everything is in: run the full ledger verification on
+        # what was stored, inside the transaction, so an import never commits a ledger that
+        # verify_ledger would reject.
+        from ledger.verify import verify
+
+        problems, _ = verify(contributor)
+        if problems:
+            raise ImportError_("ledger does not verify: " + "; ".join(problems))
     return counts
 
 

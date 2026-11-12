@@ -21,6 +21,8 @@
     <a href="{% url 'ui:trends' %}"{% if request.resolver_match.url_name == 'trends' %} aria-current="page"{% endif %}>Trends</a>
     <a href="{% url 'ui:recent' %}"{% if request.resolver_match.url_name == 'recent' %} aria-current="page"{% endif %}>Recent</a>
     <a href="{% url 'ui:modules' %}"{% if request.resolver_match.url_name == 'modules' %} aria-current="page"{% endif %}>Modules</a>
+    <a href="{% url 'ui:permissions' %}"{% if request.resolver_match.url_name == 'permissions' or request.resolver_match.url_name == 'revoke' %} aria-current="page"{% endif %}>Permissions</a>
+    <a href="{% url 'ui:statement' %}"{% if request.resolver_match.url_name == 'statement' %} aria-current="page"{% endif %}>Statement</a>
     <form method="post" action="{% url 'ui:logout' %}" class="inline" data-logout>{% csrf_token %}<button type="submit" class="link">Log out</button></form>
   </nav>
   {% endif %}

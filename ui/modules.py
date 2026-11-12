@@ -51,7 +51,61 @@ def registry():
             if manifest["id"] in out:
                 raise ManifestError(f"duplicate module id {manifest['id']!r}")
             out[manifest["id"]] = manifest
+    _owners(out)  # refuse inconsistent categories at load time
     return out
+
+
+# Data categories (M5). A category is owned by whoever writes its record kinds: a module (its
+# manifest "writes") or the core, for the kinds no module writes. Every kind has one category.
+CORE = "core"
+CORE_CATEGORIES = {"daily_snapshot": "daily_metrics", "weekly_check": "wellbeing"}
+CATEGORY_LABELS = {
+    "daily_metrics": "Daily metrics (sleep, heart rate, body composition)",
+    "wellbeing": "Wellbeing (weekly check)",
+    "probes": "Cognitive probes",
+    "work": "Work blocks and resets",
+    "discomfort": "Discomfort checks",
+    "training": "Training sessions and sets",
+}
+
+
+def _owners(reg):
+    """{category: (owner, [kinds])}, core first; ManifestError when a kind has two categories or a
+    category has two owners."""
+    kind_category = dict(CORE_CATEGORIES)
+    owners = {cat: [CORE, []] for cat in CORE_CATEGORIES.values()}
+    for kind, cat in CORE_CATEGORIES.items():
+        owners[cat][1].append(kind)
+    for mid, manifest in reg.items():
+        for key in ("writes", "reads", "shares"):
+            for entry in manifest[key]:
+                kind, cat = entry["kind"], entry["category"]
+                if kind_category.setdefault(kind, cat) != cat:
+                    raise ManifestError(f"module {mid}: {kind} is in category {kind_category[kind]!r}, not {cat!r}")
+        for entry in manifest["writes"]:
+            owner, kinds = owners.setdefault(entry["category"], [mid, []])
+            if owner != mid:
+                raise ManifestError(f"module {mid}: category {entry['category']!r} is already owned by {owner}")
+            if entry["kind"] not in kinds:
+                kinds.append(entry["kind"])
+    return {cat: (owner, kinds) for cat, (owner, kinds) in owners.items()}
+
+
+@lru_cache(maxsize=1)
+def _category_list():
+    return tuple({"id": cat, "label": CATEGORY_LABELS.get(cat, cat.replace("_", " ").capitalize()), "owner": owner,
+                  "kinds": tuple(kinds)} for cat, (owner, kinds) in _owners(registry()).items())
+
+
+def categories():
+    """[{"id", "label", "owner", "kinds"}] for every data category, core first, then modules in order.
+    Built once from the manifests (like the registry) and copied per call."""
+    return [{**c, "kinds": list(c["kinds"])} for c in _category_list()]
+
+
+def kinds_of(category):
+    """Record kinds of a category ([] for an unknown one)."""
+    return next((c["kinds"] for c in categories() if c["id"] == category), [])
 
 
 def enabled_ids():

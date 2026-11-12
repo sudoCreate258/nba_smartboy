@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "modules.zone",
     "modules.training",
     "backup",
+    "ledger",
 ]
 
 MIDDLEWARE = [

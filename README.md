@@ -131,6 +131,9 @@ Open http://localhost:8000/ and log in with your Django user. It has these pages
 - **Check in:** quick forms for the daily snapshot, probe, work block, discomfort check and reset.
 - **Trends:** charts for the last 4 or 12 weeks.
 - **Recent:** "Correct this" on any record from the last 14 days. A correction saves a new version; nothing is edited or deleted.
+- **Modules:** switch the probes, zone and training modules on or off.
+- **Permissions:** your data categories with record counts; grant or revoke a simulated recipient's read access per category. Every read is recorded in a tamper-evident ledger (`manage.py verify_ledger`).
+- **Statement:** per month, which categories were read, by whom, for what purpose, and the simulated credits (not money). Downloadable with its own CID.
 
 The app works without JavaScript. With it, check-ins you make while the instance is unreachable are kept on the phone and sent when it is reachable again; a check-in sent twice is stored once.
 

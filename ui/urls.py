@@ -2,7 +2,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import views
+from . import ledger_views, views
 
 app_name = "ui"
 
@@ -18,6 +18,10 @@ urlpatterns = [
     path("csrf-token/", views.csrf_token, name="csrf_token"),
     path("my-data/", views.export_download, name="export"),
     path("modules/", views.modules_page, name="modules"),
+    path("permissions/", ledger_views.permissions_page, name="permissions"),
+    path("permissions/revoke/<str:cid>/", ledger_views.revoke_page, name="revoke"),
+    path("statement/", ledger_views.statement_page, name="statement"),
+    path("statement/download/", ledger_views.statement_download, name="statement_download"),
     path("api/v0/today", views.api_today, name="api_today"),
     path("api/v0/trends", views.api_trends, name="api_trends"),
     path("api/v0/recent", views.api_recent, name="api_recent"),
