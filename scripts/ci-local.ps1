@@ -18,6 +18,7 @@ $status = $LASTEXITCODE
 $failed = @($out | Select-String -Pattern "^FAILED " | ForEach-Object { $_.Line })
 if ($failed.Count -gt 0) {
     New-Item -ItemType Directory -Force .agents | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".agents/ci-local-last-output.txt"), ($out -join "`n"))
     [System.IO.File]::AppendAllText((Join-Path (Get-Location) ".agents/ci-local-failures.txt"),
         "$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) ${commit}:`n" + ($failed -join "`n") + "`n")
     $failed | Write-Output
