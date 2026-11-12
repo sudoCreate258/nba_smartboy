@@ -33,6 +33,29 @@ if TWIN_LAN_HOST:
         ALLOWED_HOSTS.append(TWIN_LAN_HOST)
     CSRF_TRUSTED_ORIGINS.append(f"http://{TWIN_LAN_HOST}:8000")
 
+# LAN HTTPS (M6): the opt-in `https` Compose profile runs a TLS server (gunicorn) with TWIN_HTTPS=1 on
+# TWIN_HTTPS_HOST:8443, using a certificate from the owner's local CA (scripts/lan-cert.ps1). Only that
+# process gets the secure settings below; the plain web service on 127.0.0.1:8000 is unchanged.
+TWIN_HTTPS = os.environ.get("TWIN_HTTPS", "0") == "1"
+TWIN_HTTPS_HOST = os.environ.get("TWIN_HTTPS_HOST", "").strip()
+TWIN_HTTPS_PORT = os.environ.get("TWIN_HTTPS_PORT", "8443").strip()
+if TWIN_HTTPS:
+    if DEBUG:
+        raise ImproperlyConfigured("HTTPS mode (TWIN_HTTPS=1) refuses to start while DJANGO_DEBUG=1.")
+    for host in [TWIN_HTTPS_HOST] if TWIN_HTTPS_HOST else []:
+        if host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(host)
+        CSRF_TRUSTED_ORIGINS.append(f"https://{host}:{TWIN_HTTPS_PORT}")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True  # the TLS server has no plain port; this only guards a misconfiguration
+    # One year. HSTS is per host (not port): once a phone saw it, that address is HTTPS-only for it,
+    # which is the point of this mode (README says how to go back).
+    SECURE_HSTS_SECONDS = int(os.environ.get("TWIN_HSTS_SECONDS", str(365 * 24 * 3600)))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # Preloading is for public domain names in browser lists; a LAN address cannot be preloaded.
+    SILENCED_SYSTEM_CHECKS = ["security.W021"]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -52,6 +75,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # CSP (incl. frame-ancestors) and Permissions-Policy (M6); before WhiteNoise so static files get them too.
+    "ui.security.SecurityHeadersMiddleware",
     # Serves static files (admin and app) with debug off; no CDN.
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
