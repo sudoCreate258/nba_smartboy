@@ -121,3 +121,29 @@ KINDS = {
     "discomfort": ("Discomfort check", DiscomfortForm),
     "reset": ("Reset", ResetForm),
 }
+
+
+class GrantForm(forms.Form):
+    """Grant one simulated recipient read access to one category (M5). Starts now."""
+
+    recipient = forms.ChoiceField(label="Recipient")
+    purpose = forms.CharField(label="Purpose", max_length=500, help_text="Why this recipient may read the data.")
+    end = forms.DateTimeField(label="Ends (optional)", required=False, widget=LocalDateTimeInput(),
+                              input_formats=[LOCAL_INPUT, "%Y-%m-%dT%H:%M:%S"],
+                              help_text="Leave empty to keep it until you revoke it.")
+
+    def __init__(self, *args, **kwargs):
+        from ledger.models import Recipient
+
+        super().__init__(*args, **kwargs)
+        self.fields["recipient"].choices = Recipient.choices
+
+    def clean_end(self):
+        end = self.cleaned_data.get("end")
+        if end is not None and end <= timezone.now():
+            raise forms.ValidationError("The end must be in the future.")
+        return end
+
+
+class RevokeForm(forms.Form):
+    reason = forms.CharField(label="Reason (optional)", max_length=200, required=False)

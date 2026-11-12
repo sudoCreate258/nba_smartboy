@@ -1,0 +1,54 @@
+{% extends "ui/base.html" %}
+{% block title %}Permissions - Twin{% endblock %}
+{% block content %}
+<h1>Data categories and permissions</h1>
+<p class="note">Each category of your data belongs to the core or to a module. Nothing can read a category without a grant from you, and every read is recorded on your <a href="{% url 'ui:statement' %}">statement</a>. Recipients are simulated in this version; no data leaves this device.</p>
+{% for section in sections %}
+<section aria-labelledby="owner-{{ section.owner }}">
+  <h2 id="owner-{{ section.owner }}">{{ section.name }}{% if not section.on %} <span class="flag flag-amber">module off</span>{% endif %}</h2>
+  {% for c in section.categories %}
+  <div class="category" id="cat-{{ c.id }}">
+    <h3>{{ c.label }}</h3>
+    <p class="note">{{ c.count }} current record{{ c.count|pluralize }} ({{ c.kinds|join:", " }})</p>
+    {% if c.active %}
+    <ul class="grants" aria-label="Active grants for {{ c.label }}">
+      {% for row in c.active %}
+      <li><span><strong>{{ row.recipient }}</strong>: {{ row.g.purpose }}<br><span class="note">since {{ row.g.start|date:"Y-m-d H:i" }}{% if row.g.end %}, until {{ row.g.end|date:"Y-m-d H:i" }}{% endif %}</span></span>
+        <a href="{% url 'ui:revoke' row.g.cid %}">Revoke<span class="visually-hidden"> {{ row.recipient }} for {{ c.label }}</span></a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No one may read this category.</p>
+    {% endif %}
+    <details{% if c.form.is_bound %} open{% endif %}>
+      <summary>Grant access to {{ c.label|lower }}</summary>
+      {% if c.form.non_field_errors %}<div class="error" role="alert">{% for e in c.form.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>{% endif %}
+      <form method="post" action="{% url 'ui:permissions' %}" class="stack" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="category" value="{{ c.id }}">
+        {% for field in c.form %}
+        <div class="field{% if field.errors %} has-error{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">(required)</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+          {% if field.errors %}<p class="error" role="alert">{{ field.errors|join:" " }}</p>{% endif %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="primary">Grant</button>
+      </form>
+    </details>
+    {% if c.past %}
+    <details>
+      <summary>Past grants ({{ c.past|length }})</summary>
+      <ul class="grants">
+        {% for row in c.past %}
+        <li><span>{{ row.recipient }}: {{ row.g.purpose }}<br><span class="note">{{ row.g.start|date:"Y-m-d H:i" }} to {% if row.revocation %}{{ row.revocation.at|date:"Y-m-d H:i" }} (revoked){% else %}{{ row.g.end|date:"Y-m-d H:i" }} (ended){% endif %}</span></span></li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endfor %}
+{% endblock %}

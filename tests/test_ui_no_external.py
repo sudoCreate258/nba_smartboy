@@ -43,7 +43,7 @@ def client_in(client, db):
 
 
 PAGES = [("ui:home", ""), ("ui:checkin_index", ""), ("ui:trends", ""), ("ui:trends", "?weeks=12"), ("ui:recent", ""),
-         ("ui:offline", "")] + [("ui:checkin", kind) for kind in ("snapshot", "probe", "work", "discomfort", "reset")]
+         ("ui:offline", ""), ("ui:modules", ""), ("ui:permissions", ""), ("ui:statement", "")] + [("ui:checkin", kind) for kind in ("snapshot", "probe", "work", "discomfort", "reset")]
 
 
 def _url(name, extra):
