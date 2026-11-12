@@ -88,12 +88,14 @@ def test_failed_set_stays_in_staging_and_cannot_be_restored_or_pruned_against(mi
     good = runner.run_backup(now=NOW - 2 * DAY, remote=name, config=config)
     assert good.status == "ok" and good.published
     real = runner.rclone
+    published = {p for p in store.rglob("*") if p.is_file()}
 
     def corrupt_upload(args, cfg):
         out = real(args, cfg)
         if args[0] == "copy" and "staging/" in args[2] and "/staging" not in args[1]:
-            files = [p for p in store.rglob("*") if p.is_file()]
-            newest = max(files, key=lambda p: p.stat().st_mtime)
+            # A file this upload added (not by mtime: the VM clock can step back, M6).
+            files = sorted(p for p in store.rglob("*") if p.is_file() and p not in published)
+            newest = max(files, key=lambda p: p.stat().st_size)
             data = bytearray(newest.read_bytes())
             data[len(data) // 2] ^= 0xFF
             newest.write_bytes(bytes(data))
