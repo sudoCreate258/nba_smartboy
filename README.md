@@ -1,8 +1,8 @@
-# nba_smartboy
+# nymbus_v1510
 
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-![CI](https://github.com/sudoCreate258/nba_smartboy/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/sudoCreate258/nymbus_v1510/actions/workflows/ci.yml/badge.svg)
 
 
 Local-first personal health digital twin (Nymbus phase 1). Django 5 + PostgreSQL 16 in Docker Compose. Health data stays local.

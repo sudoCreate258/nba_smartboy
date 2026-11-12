@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping with nba_smartboy. This project handles personal health data, so keep real data out of commits, issues, and PRs.
+Thanks for helping with nymbus_v1510. This project handles personal health data, so keep real data out of commits, issues, and PRs.
 
 ## Who can contribute
 Outside code contributions are not open until the worker co-op stage. Until then, please do not send code PRs.
