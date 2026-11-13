@@ -22,7 +22,7 @@ def test_data_model_doc_covers_every_record_and_omit_if_null_field():
     # Models defined in core/models.py (tests may register throwaway subclasses).
     records = [m for m in apps.get_app_config("core").get_models()
                if issubclass(m, ProvenancedRecord) and m.__module__ == "core.models"]
-    assert len(records) == 8
+    assert len(records) == 11  # + TwinCapture, PostureSample, TwinMinute (027)
     for model in records:
         assert f"### {model.__name__} (`{model.record_kind}`)" in text, model.__name__
     assert "| `move_time_cv` |" in text and "OMIT_IF_NULL" in text

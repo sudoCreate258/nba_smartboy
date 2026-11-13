@@ -30,6 +30,14 @@ def mike(db):
     return Contributor.objects.get(handle="mike")
 
 
+def seed_dtom(contributor):
+    """One capture (with its 2 samples) and one minute, from the synthetic fixtures (used by other tests too)."""
+    from core.management.commands.import_twin_capture import import_capture
+    import_capture(load(CAPTURE), contributor)
+    save_record(TwinMinute(contributor=contributor, source="dtom", t_start=parse_datetime("2026-11-13T15:05:00+00:00"),
+                           t_end=parse_datetime("2026-11-13T15:06:00+00:00"), data=load(MINUTE)))
+
+
 def run(*args):
     out = StringIO()
     call_command("import_twin_capture", *args, stdout=out)
