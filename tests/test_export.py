@@ -86,7 +86,8 @@ def test_export_lines_are_self_verifying(mike):
     records = [json.loads(line) for line in lines[1:] if json.loads(line)["type"] == "record"]
     assert len(records) == sum(m.objects.count() for m in RECORD_MODELS) == 14
     assert all(verify_line(r) for r in records)
-    assert {r["kind"] for r in records} == {m.record_kind for m in RECORD_MODELS}
+    dtom = {"twin_capture", "posture_sample", "twin_minute"}  # 027: covered by tests/test_twin_import.py
+    assert {r["kind"] for r in records} == {m.record_kind for m in RECORD_MODELS} - dtom
     assert sum(json.loads(line)["type"] == "supersession" for line in lines) == 4
     snap = next(r for r in records if r["kind"] == "daily_snapshot" and r["fields"]["spo2"] == "96.5")
     assert snap["fields"]["notes"] == "é ünïcode" and snap["fields"]["wake_time"].endswith("+00:00")

@@ -871,3 +871,102 @@ class ProbeBaseline(models.Model):
             raise ValidationError({"kind": "module sessions are not scored, so they have no baseline."})
         if self.start and self.end and self.end <= self.start:
             raise ValidationError({"end": "end must be after start."})
+
+
+# --- dtom (browser twin) data, 027 Part A ---------------------------------------------------------
+# Estimates from the owner's own cameras; stored exactly as dtom sent them (nulls stay null), checked
+# against the contract in twin_metrics/dtom.py. Owner-only: no grants are created for them.
+
+def _dtom_check(check, value, field):
+    from twin_metrics.dtom import DtomError
+
+    try:
+        return check(value)
+    except DtomError as exc:
+        raise ValidationError({field: str(exc)})
+
+
+class TwinCapture(ProvenancedRecord):
+    """One dtom session export (nymbus.twin_capture.v1), without its posture samples (those are
+    PostureSample records pointing here). `raw` keeps every other field as given, unknown ones too."""
+
+    record_kind = "twin_capture"
+
+    source = models.CharField(max_length=16, default="dtom")
+    exported_at = models.DateTimeField()
+    sample_count = models.PositiveIntegerField()
+    raw = models.JSONField(help_text="The export as given, minus posture_samples_v0.")
+
+    class Meta:
+        ordering = ["-exported_at"]
+
+    def __str__(self):
+        return f"dtom capture {self.exported_at:%Y-%m-%d %H:%M} ({self.sample_count} samples) {self.cid[:12]}"
+
+    def clean(self):
+        super().clean()
+        from twin_metrics.dtom import check_capture
+
+        if isinstance(self.raw, dict):
+            exported = _dtom_check(check_capture, {**self.raw, "posture_samples_v0": []}, "raw")
+            if isinstance(self.exported_at, datetime.datetime) and exported != self.exported_at:
+                raise ValidationError({"exported_at": "must equal raw.exported_at"})
+        else:
+            raise ValidationError({"raw": "must be a JSON object"})
+
+
+class PostureSample(ProvenancedRecord):
+    """One posture sample of a dtom capture, as given (label, at, frames, angles, measures, load, look...)."""
+
+    record_kind = "posture_sample"
+
+    capture_cid = models.CharField(max_length=128, help_text="CID of the TwinCapture it came from.")
+    index = models.PositiveIntegerField(help_text="Position in the capture's posture_samples_v0.")
+    label = models.CharField(max_length=100)
+    at = models.DateTimeField()
+    data = models.JSONField(help_text="The sample as given.")
+
+    class Meta:
+        ordering = ["at"]
+
+    def __str__(self):
+        return f"posture {self.label} {self.at:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+    def clean(self):
+        super().clean()
+        from twin_metrics.dtom import check_sample
+
+        _dtom_check(lambda d: check_sample(d, "sample"), self.data, "data")
+        if isinstance(self.data, dict) and (self.data.get("label") != self.label):
+            raise ValidationError({"label": "must equal data.label"})
+        if not self.contributor_id or not self.capture_cid:
+            return
+        capture = TwinCapture.objects.filter(cid=self.capture_cid).first()
+        if capture is None or capture.contributor_id != self.contributor_id:
+            raise ValidationError({"capture_cid": "Must be a twin capture of the same contributor."})
+
+
+class TwinMinute(ProvenancedRecord):
+    """One minute of dtom summary (nymbus.twin_minute.v1), as given. Received live in 027 Part B."""
+
+    record_kind = "twin_minute"
+
+    source = models.CharField(max_length=16)
+    t_start = models.DateTimeField()
+    t_end = models.DateTimeField()
+    data = models.JSONField(help_text="The minute document as given.")
+
+    class Meta:
+        ordering = ["-t_start"]
+
+    def __str__(self):
+        return f"dtom minute {self.t_start:%Y-%m-%d %H:%M} {self.cid[:12]}"
+
+    def clean(self):
+        super().clean()
+        from twin_metrics.dtom import check_minute
+
+        start, end = _dtom_check(check_minute, self.data, "data") or (None, None)
+        if isinstance(self.data, dict) and (start != self.t_start or end != self.t_end
+                                            or self.data.get("source") != self.source):
+            raise ValidationError("source, t_start and t_end must equal the document's.")

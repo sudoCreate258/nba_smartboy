@@ -6,6 +6,7 @@ from core.models import Contributor, Supersession
 from core.services.export import EXPORT_MODELS
 from tests.test_export import seed
 from tests.test_ledger_export import seed_ledger
+from tests.test_twin_import import seed_dtom
 
 TABLES = [m._meta.db_table for m in EXPORT_MODELS] + [Supersession._meta.db_table]
 
@@ -15,6 +16,7 @@ def mike(db):
     m = Contributor.objects.get(handle="mike")
     seed(m)
     seed_ledger(m)
+    seed_dtom(m)  # 027: the dtom tables need rows too, or the row triggers have nothing to fire on
     return m
 
 

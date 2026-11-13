@@ -26,11 +26,12 @@ from nymbus.provenance import canonical_bytes, compute_cid, normalize_fields
 from ledger.models import AccessEvent, Grant, Revocation
 
 from ..models import (IDENTITY_FIELDS, Contributor, DailySnapshot, DiscomfortCheck, ProbeSession, ProvenancedRecord, Reset,
-                      Supersession, TrainingSession, TrainingSet, WeeklyCheck, WorkBlock)
+                      Supersession, TrainingSession, TrainingSet, TwinCapture, PostureSample, TwinMinute, WeeklyCheck,
+                      WorkBlock)
 
 FORMAT, VERSION = "nymbus-jsonl", 1
 RECORD_MODELS = [DailySnapshot, ProbeSession, WorkBlock, DiscomfortCheck, Reset, WeeklyCheck, TrainingSession,
-                 TrainingSet]  # the owner's data
+                 TrainingSet, TwinCapture, PostureSample, TwinMinute]  # the owner's data
 LEDGER_MODELS = [Grant, Revocation, AccessEvent]  # who may read it, and every read (M5)
 EXPORT_MODELS = RECORD_MODELS + LEDGER_MODELS
 BY_KIND = {m.record_kind: m for m in EXPORT_MODELS}

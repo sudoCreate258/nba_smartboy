@@ -58,10 +58,13 @@ def registry():
 # Data categories (M5). A category is owned by whoever writes its record kinds: a module (its
 # manifest "writes") or the core, for the kinds no module writes. Every kind has one category.
 CORE = "core"
-CORE_CATEGORIES = {"daily_snapshot": "daily_metrics", "weekly_check": "wellbeing"}
+CORE_CATEGORIES = {"daily_snapshot": "daily_metrics", "weekly_check": "wellbeing",
+                   # dtom (027): posture, load and face estimates from the owner's cameras
+                   "twin_capture": "posture", "posture_sample": "posture", "twin_minute": "posture"}
 CATEGORY_LABELS = {
     "daily_metrics": "Daily metrics (sleep, heart rate, body composition)",
     "wellbeing": "Wellbeing (weekly check)",
+    "posture": "Posture and load (dtom estimates)",
     "probes": "Cognitive probes",
     "work": "Work blocks and resets",
     "discomfort": "Discomfort checks",
