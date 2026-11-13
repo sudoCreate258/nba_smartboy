@@ -155,6 +155,8 @@ TWIN_LOGIN_WINDOW_SECONDS = 15 * 60
 # Encrypted off-hours backup (M4.5). The rclone config path comes from RCLONE_CONFIG (set by the
 # backup service from RCLONE_CONFIG_HOST); BACKUP_REMOTE names the crypt remote, e.g. "twin-crypt:".
 BACKUP_REMOTE = os.environ.get("BACKUP_REMOTE", "").strip()
+# dtom live ingest (027 Part B): POST /api/twin/minute needs X-Nymbus-Token equal to this; empty = endpoint off.
+DTOM_INGEST_TOKEN = os.environ.get("DTOM_INGEST_TOKEN", "").strip()
 BACKUP_WINDOW = os.environ.get("BACKUP_WINDOW", "02:00-05:00")
 BACKUP_INCLUDE_INBOX = os.environ.get("BACKUP_INCLUDE_INBOX", "0") == "1"
 BACKUP_INBOX_DIR = BASE_DIR / "data" / "inbox"
