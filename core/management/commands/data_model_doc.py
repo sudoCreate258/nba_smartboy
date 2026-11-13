@@ -22,6 +22,9 @@ from core.models import (
     Supersession,
     TrainingSession,
     TrainingSet,
+    TwinCapture,
+    PostureSample,
+    TwinMinute,
     WeeklyCheck,
     WorkBlock,
 )
@@ -29,7 +32,7 @@ from ledger.models import AccessEvent, Grant, Revocation
 
 PATH = Path(settings.BASE_DIR) / "docs" / "DATA_MODEL.md"
 RECORDS = [DailySnapshot, ProbeSession, WorkBlock, DiscomfortCheck, Reset, WeeklyCheck, TrainingSession, TrainingSet,
-           Grant, Revocation, AccessEvent]
+           TwinCapture, PostureSample, TwinMinute, Grant, Revocation, AccessEvent]
 OTHER = [Contributor, Supersession, ProbeBaseline]
 
 # Rules that live in clean()/save() rather than in field definitions. Keep in step with core/models.py.

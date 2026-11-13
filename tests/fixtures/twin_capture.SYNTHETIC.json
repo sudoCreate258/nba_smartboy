@@ -1,0 +1,24 @@
+{
+  "schema": "nymbus.twin_capture.v1",
+  "note": "SYNTHETIC test fixture written by hand; not from a person",
+  "exported_at": "2026-11-13T15:30:00Z",
+  "cameras": ["A", "B"],
+  "body_model": {
+    "bone_lengths_m": {"upper_arm": 0.3, "forearm": 0.25, "torso": 0.5, "neck": null},
+    "range_of_motion_deg": {"neck_flexion": 45, "shoulder": {"flexion": 170, "abduction": null}}
+  },
+  "posture_seconds": {"sitting": 1500, "standing": 300},
+  "posture_samples_v0": [
+    {"label": "sitting", "at": "2026-11-13T15:05:00Z", "frames": 30,
+     "angles": {"neck_flex": 18.5, "trunk_lean": 7.0}, "measures": {"shoulder_height_diff_cm": 1.2},
+     "load_pct": {"neck": 12.0, "back": 6.5, "shL": 4.0, "shR": null}, "load_nm": {"neck": 3.1, "back": 22.0},
+     "look": "screen", "head_pitch": -12.0, "side_view": true},
+    {"label": "standing", "at": "2026-11-13T15:20:00Z", "frames": 24,
+     "angles": {"neck_flex": null, "trunk_lean": 2.0}, "measures": null,
+     "load_pct": {"neck": null, "back": 3.0, "shL": 2.0, "shR": 2.5}, "load_nm": null,
+     "look": null, "head_pitch": null, "side_view": false, "future_field": {"kept": "as given"}}
+  ],
+  "coach_log": [{"t": "2026-11-13T15:10:00Z", "msg": "neck forward"}],
+  "face_log": [{"t": "2026-11-13T15:11:00Z", "blinks": 14}],
+  "extra_top_level": "unknown fields are kept"
+}

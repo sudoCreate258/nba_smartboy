@@ -1,0 +1,12 @@
+{"schema": "nymbus.twin_minute.v1", "t_start": "2026-11-13T15:05:00Z", "t_end": "2026-11-13T15:06:00Z",
+ "source": "dtom", "version": "v0", "cameras": ["A"], "side_view_pct": null,
+ "posture": {"sitting_s": 60, "standing_s": 0},
+ "load_pct_avg": {"neck": 11.0, "back": null, "shL": 3.0, "shR": 3.5},
+ "load_pct_max": {"neck": 15.0, "back": null, "shL": 5.0, "shR": 4.0},
+ "fatigue_max": {"neck": 0.2, "back": null, "shL": 0.1, "shR": 0.1}, "same_position_max_min": 7,
+ "face": {"blinks_per_min": 13, "yawns": 0, "brow_tension": null,
+          "looking_pct": {"screen": 85, "down": 10, "away": 5}, "head_pitch_avg": -10.5},
+ "using_s": {"laptop": 55, "phone": 0},
+ "events": [{"t": "2026-11-13T15:05:30Z", "type": "coach_flag", "region": "neck"},
+            {"t": "2026-11-13T15:05:50Z", "type": "focus", "region": null}],
+ "note": "SYNTHETIC test fixture written by hand; not from a person"}

@@ -275,6 +275,55 @@ Rules:
 - `exercise` is lower-cased, trimmed and inner whitespace collapsed before hashing.
 - `joint_pain_area` requires `joint_pain`. `joint_pain >= 2` is a stop signal in the training report.
 
+### TwinCapture (`twin_capture`)
+
+One dtom session export (nymbus.twin_capture.v1), without its posture samples (those are PostureSample records pointing here). `raw` keeps every other field as given, unknown ones too.
+
+| field | type | required | bounds / choices | notes |
+|---|---|---|---|---|
+| `id` | id | auto |  |  |
+| `cid` | text (max 128) | auto |  |  |
+| `contributor` | FK -> Contributor | required |  |  |
+| `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
+| `source` | text (max 16) | default `dtom` |  |  |
+| `exported_at` | datetime (UTC) | required |  |  |
+| `sample_count` | int >= 0 | required |  |  |
+| `raw` | JSON | required |  | The export as given, minus posture_samples_v0. |
+
+### PostureSample (`posture_sample`)
+
+One posture sample of a dtom capture, as given (label, at, frames, angles, measures, load, look...).
+
+| field | type | required | bounds / choices | notes |
+|---|---|---|---|---|
+| `id` | id | auto |  |  |
+| `cid` | text (max 128) | auto |  |  |
+| `contributor` | FK -> Contributor | required |  |  |
+| `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
+| `capture_cid` | text (max 128) | required |  | CID of the TwinCapture it came from. |
+| `index` | int >= 0 | required |  | Position in the capture's posture_samples_v0. |
+| `label` | text (max 100) | required |  |  |
+| `at` | datetime (UTC) | required |  |  |
+| `data` | JSON | required |  | The sample as given. |
+
+### TwinMinute (`twin_minute`)
+
+One minute of dtom summary (nymbus.twin_minute.v1), as given. Received live in 027 Part B.
+
+| field | type | required | bounds / choices | notes |
+|---|---|---|---|---|
+| `id` | id | auto |  |  |
+| `cid` | text (max 128) | auto |  |  |
+| `contributor` | FK -> Contributor | required |  |  |
+| `created_at` | datetime (UTC) | auto |  |  |
+| `created_seq` | BigIntegerField | auto |  | Creation order across all records (not content). |
+| `source` | text (max 16) | required |  |  |
+| `t_start` | datetime (UTC) | required |  |  |
+| `t_end` | datetime (UTC) | required |  |  |
+| `data` | JSON | required |  | The minute document as given. |
+
 ### Grant (`grant`)
 
 Permission for one simulated recipient to read one data category, for a stated purpose.
