@@ -1,0 +1,43 @@
+{% extends "ui/base.html" %}
+{% block title %}dtom {{ v.day|date:"Y-m-d" }} - Twin{% endblock %}
+{% block content %}
+<h1>Posture and load: {{ v.day|date:"Y-m-d" }}</h1>
+<p class="msg msg-warning" role="note"><strong>Estimated by dtom, not a clinical measurement.</strong> Values come from your own cameras; "–" means dtom could not measure it.</p>
+<p><a href="?day={{ prev|date:'Y-m-d' }}">Previous day</a> · <a href="?day={{ next|date:'Y-m-d' }}">Next day</a></p>
+{% if not v.summary.minutes %}
+<p>No dtom minutes on this day.</p>
+{% else %}
+<h2>Day summary</h2>
+<dl class="flags">
+  <dt>Minutes recorded</dt><dd>{{ v.summary.minutes }}</dd>
+  <dt>Sitting</dt><dd>{{ v.sitting }} min</dd>
+  <dt>Blink rate</dt><dd>{{ v.blinks }} per min (average)</dd>
+  <dt>Looking at the screen</dt><dd>{{ v.screen }} % (average)</dd>
+</dl>
+<div class="table-wrap">
+<table>
+  <caption>Load by region (% of capacity, estimated)</caption>
+  <thead><tr><th scope="col">Region</th><th scope="col">Average</th><th scope="col">Max</th><th scope="col">Minutes above {{ v.summary.threshold_pct }} %</th><th scope="col">Max fatigue</th><th scope="col">Through the day</th></tr></thead>
+  <tbody>
+  {% for r in v.regions %}<tr><td>{{ r.label }}</td><td>{{ r.avg }}</td><td>{{ r.max }}</td><td>{{ r.above }}</td><td>{{ r.fatigue }}</td>
+    <td>{% if r.spark %}<svg class="spark" viewBox="0 0 200 30" width="120" height="18" role="img" aria-label="{{ r.label }} average load through the day">{% for seg in r.spark %}<polyline points="{{ seg }}" class="line"/>{% endfor %}</svg>{% else %}–{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<h2>Minutes</h2>
+{% if v.hidden_rows %}<p class="note">Newest {{ v.rows|length }} minutes shown; {{ v.hidden_rows }} earlier ones are in the summary above.</p>{% endif %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th scope="col">Time</th><th scope="col">Sit s</th><th scope="col">Stand s</th>{% for l in region_labels %}<th scope="col">{{ l }} %</th>{% endfor %}<th scope="col">Blinks</th><th scope="col">Screen %</th><th scope="col">Events</th></tr></thead>
+  <tbody>
+  {% for m in v.rows %}<tr><td>{{ m.t }}</td><td>{{ m.sitting }}</td><td>{{ m.standing }}</td>{% for x in m.loads %}<td>{{ x }}</td>{% endfor %}<td>{{ m.blinks }}</td><td>{{ m.screen }}</td><td>{{ m.events }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+<h2>Posture samples</h2>
+{% if v.samples %}<ul>{% for s in v.samples %}<li>{{ s.at|date:"H:i" }} {{ s.label }}{% if s.data.look %}, looking {{ s.data.look }}{% endif %}</li>{% endfor %}</ul>
+{% else %}<p>None on this day.</p>{% endif %}
+{% endblock %}

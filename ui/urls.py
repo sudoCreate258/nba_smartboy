@@ -2,7 +2,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import body, ledger_views, provenance_views, twin_ingest, views
+from . import body, ledger_views, provenance_views, twin_ingest, twin_page, views
 
 app_name = "ui"
 
@@ -23,6 +23,7 @@ urlpatterns = [
     path("statement/", ledger_views.statement_page, name="statement"),
     path("provenance/", provenance_views.provenance_page, name="provenance"),
     path("body/", body.body_page, name="body"),
+    path("twin/", twin_page.twin_page, name="twin"),
     path("statement/download/", ledger_views.statement_download, name="statement_download"),
     path("api/v0/today", views.api_today, name="api_today"),
     path("api/twin/minute", twin_ingest.minute, name="twin_minute_ingest"),
