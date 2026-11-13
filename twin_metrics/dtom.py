@@ -135,3 +135,61 @@ def check_minute(doc):
         if e.get("region") not in REGIONS + (None,):
             raise DtomError(f"events[{i}].region: must be one of {', '.join(REGIONS)} or null")
     return start, end
+
+
+# --- daily summary for the owner page (027 Part C) -----------------------------------------------
+
+LOAD_THRESHOLD_PCT = 10
+
+
+def _mean(values):
+    values = [v for v in values if _is_num(v)]
+    return sum(values) / len(values) if values else None
+
+
+def _max(values):
+    values = [v for v in values if _is_num(v)]
+    return max(values) if values else None
+
+
+def summarize_day(minutes):
+    """Daily summary of twin_minute documents (dicts as stored). Nulls are left out of means and maxima,
+    never counted as 0; a value nobody measured that day is None."""
+    def region(key):
+        return {r: [(m.get(key) or {}).get(r) for m in minutes] for r in REGIONS}
+
+    avg, peak, fatigue = region("load_pct_avg"), region("load_pct_max"), region("fatigue_max")
+    sitting = [(m.get("posture") or {}).get("sitting_s") for m in minutes]
+    face = [m.get("face") or {} for m in minutes]
+    return {
+        "minutes": len(minutes),
+        "sitting_min": sum(v for v in sitting if _is_num(v)) / 60 if any(_is_num(v) for v in sitting) else None,
+        "load_avg": {r: _mean(avg[r]) for r in REGIONS},
+        "load_max": {r: _max(peak[r]) for r in REGIONS},
+        "minutes_above": {r: sum(1 for v in avg[r] if _is_num(v) and v > LOAD_THRESHOLD_PCT) for r in REGIONS},
+        "fatigue_max": {r: _max(fatigue[r]) for r in REGIONS},
+        "blinks_per_min": _mean([f.get("blinks_per_min") for f in face]),
+        "screen_pct": _mean([(f.get("looking_pct") or {}).get("screen") for f in face]),
+        "threshold_pct": LOAD_THRESHOLD_PCT,
+    }
+
+
+def sparkline(values, width=200, height=30):
+    """SVG polyline points for a series (None = gap, as separate segments); [] when nothing was measured."""
+    nums = [v for v in values if _is_num(v)]
+    if not nums:
+        return []
+    lo, hi = min(nums), max(nums)
+    span = (hi - lo) or 1
+    step = width / max(len(values) - 1, 1)
+    segments, current = [], []
+    for i, v in enumerate(values):
+        if not _is_num(v):
+            if current:
+                segments.append(current)
+            current = []
+            continue
+        current.append(f"{i * step:.1f},{height - 2 - (v - lo) / span * (height - 4):.1f}")
+    if current:
+        segments.append(current)
+    return [" ".join(s) for s in segments]

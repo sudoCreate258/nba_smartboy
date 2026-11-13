@@ -84,3 +84,5 @@ details summary { min-height: 44px; display: flex; align-items: center; cursor: 
 .body-map .body-outline { fill: none; stroke: var(--line); stroke-width: 1; }
 .body-map .muscle { fill: var(--accent); stroke: var(--muted); stroke-width: 0.3; }
 .body-map .pain { fill: none; stroke: var(--red); stroke-width: 2; }
+.spark { display: block; }
+.spark .line { fill: none; stroke: var(--accent); stroke-width: 2; }
