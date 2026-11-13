@@ -236,6 +236,7 @@ A strength or conditioning session (RP-style programming fields).
 | `location` | text (max 8) | optional | one of: `gym`, `home`, `other` |  |
 | `session_rpe` | decimal(3,1) | optional | >= 0; <= 10 |  |
 | `notes` | text | optional |  |  |
+| `soreness` | int >= 0 | optional | <= 10 | OMIT_IF_NULL Overall soreness before the session, 0-10. |
 
 Rules:
 - `ended_at`, when set, must be after `started_at`.
@@ -263,6 +264,10 @@ One set of a TrainingSession, referenced by the session's CID.
 | `joint_pain` | int >= 0 | optional | >= 0; <= 3 |  |
 | `joint_pain_area` | text (max 16) | optional | one of: `neck`, `shoulder`, `wrist`, `hip`, `low_back`, `other` |  |
 | `notes` | text | optional |  |  |
+| `side` | text (max 9) | optional | one of: `L`, `R`, `bilateral` | OMIT_IF_NULL L or R for a one-sided set; bilateral (or empty) for both sides. |
+| `rpe` | decimal(3,1) | optional | >= 0; <= 10 | OMIT_IF_NULL |
+| `tempo` | text (max 16) | optional |  | OMIT_IF_NULL e.g. "3-1-1-0". |
+| `rest_s` | int >= 0 | optional | <= 3600 | OMIT_IF_NULL |
 
 Rules:
 - `session_cid` must be a current TrainingSession of the same contributor.

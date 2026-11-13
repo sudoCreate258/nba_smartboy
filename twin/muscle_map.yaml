@@ -1,0 +1,44 @@
+# Implied muscle activation (025 Part C, R12). AN ESTIMATE, NOT A MEASUREMENT.
+# exercise (as logged, lower case, single spaces) -> muscles with weights 0-1.
+# primary: main movers; secondary: assisting muscles. `source` is a citation placeholder: the owner
+# fills it from the EMG literature; until then the weights are rough builder guesses.
+muscles: [chest, front_delts, side_delts, rear_delts, triceps, biceps, forearms, lats, upper_back,
+          lower_back, abs, glutes, quads, hamstrings, adductors, calves]
+
+flags:
+  # Left/right: flag a muscle when left/right one-sided volume is outside this band.
+  lr_ratio_band: [0.9, 1.1]
+  # Agonist/antagonist pairs: flag when volume(first) / volume(second) is outside the band.
+  pairs:
+    - {muscles: [chest, upper_back], band: [0.7, 1.4]}
+    - {muscles: [quads, hamstrings], band: [0.6, 1.7]}
+    - {muscles: [biceps, triceps], band: [0.6, 1.6]}
+    - {muscles: [front_delts, rear_delts], band: [0.5, 2.0]}
+
+exercises:
+  bench press:        {primary: {chest: 1.0, triceps: 0.6, front_delts: 0.5}, secondary: {}, source: "TODO owner: EMG citation"}
+  incline bench press: {primary: {chest: 0.9, front_delts: 0.7, triceps: 0.5}, secondary: {}, source: "TODO owner: EMG citation"}
+  dumbbell press:     {primary: {chest: 1.0, front_delts: 0.5, triceps: 0.5}, secondary: {}, source: "TODO owner: EMG citation"}
+  push-up:            {primary: {chest: 0.9, triceps: 0.6}, secondary: {front_delts: 0.4, abs: 0.3}, source: "TODO owner: EMG citation"}
+  dip:                {primary: {triceps: 1.0, chest: 0.7}, secondary: {front_delts: 0.4}, source: "TODO owner: EMG citation"}
+  overhead press:     {primary: {front_delts: 1.0, side_delts: 0.5, triceps: 0.6}, secondary: {upper_back: 0.3, abs: 0.3}, source: "TODO owner: EMG citation"}
+  lateral raise:      {primary: {side_delts: 1.0}, secondary: {upper_back: 0.3}, source: "TODO owner: EMG citation"}
+  face pull:          {primary: {rear_delts: 1.0, upper_back: 0.6}, secondary: {}, source: "TODO owner: EMG citation"}
+  row:                {primary: {upper_back: 1.0, lats: 0.7}, secondary: {biceps: 0.5, rear_delts: 0.4, forearms: 0.3}, source: "TODO owner: EMG citation"}
+  dumbbell row:       {primary: {lats: 0.9, upper_back: 0.9}, secondary: {biceps: 0.5, rear_delts: 0.4}, source: "TODO owner: EMG citation"}
+  pull-up:            {primary: {lats: 1.0, biceps: 0.6}, secondary: {upper_back: 0.5, forearms: 0.4}, source: "TODO owner: EMG citation"}
+  lat pulldown:       {primary: {lats: 1.0, biceps: 0.5}, secondary: {upper_back: 0.4}, source: "TODO owner: EMG citation"}
+  biceps curl:        {primary: {biceps: 1.0}, secondary: {forearms: 0.4}, source: "TODO owner: EMG citation"}
+  triceps extension:  {primary: {triceps: 1.0}, secondary: {}, source: "TODO owner: EMG citation"}
+  squat:              {primary: {quads: 1.0, glutes: 0.8}, secondary: {adductors: 0.5, lower_back: 0.4, hamstrings: 0.3}, source: "TODO owner: EMG citation"}
+  front squat:        {primary: {quads: 1.0, glutes: 0.6}, secondary: {upper_back: 0.4, abs: 0.4}, source: "TODO owner: EMG citation"}
+  leg press:          {primary: {quads: 1.0, glutes: 0.6}, secondary: {adductors: 0.3}, source: "TODO owner: EMG citation"}
+  lunge:              {primary: {quads: 0.9, glutes: 0.9}, secondary: {adductors: 0.4, hamstrings: 0.3}, source: "TODO owner: EMG citation"}
+  split squat:        {primary: {quads: 0.9, glutes: 0.9}, secondary: {adductors: 0.4}, source: "TODO owner: EMG citation"}
+  leg extension:      {primary: {quads: 1.0}, secondary: {}, source: "TODO owner: EMG citation"}
+  deadlift:           {primary: {hamstrings: 0.8, glutes: 0.9, lower_back: 0.9}, secondary: {quads: 0.4, upper_back: 0.5, forearms: 0.5}, source: "TODO owner: EMG citation"}
+  romanian deadlift:  {primary: {hamstrings: 1.0, glutes: 0.7}, secondary: {lower_back: 0.6}, source: "TODO owner: EMG citation"}
+  leg curl:           {primary: {hamstrings: 1.0}, secondary: {calves: 0.2}, source: "TODO owner: EMG citation"}
+  hip thrust:         {primary: {glutes: 1.0}, secondary: {hamstrings: 0.4}, source: "TODO owner: EMG citation"}
+  calf raise:         {primary: {calves: 1.0}, secondary: {}, source: "TODO owner: EMG citation"}
+  plank:              {primary: {abs: 1.0}, secondary: {lower_back: 0.3}, source: "TODO owner: EMG citation"}
