@@ -1,0 +1,39 @@
+{% extends "ui/base.html" %}
+{% block title %}Provenance - Twin{% endblock %}
+{% block content %}
+<h1>Provenance{% if is_demo %} <span class="flag flag-amber">DEMO data</span>{% endif %}</h1>
+<p class="note">Read-only. Pick a record to see its content ID (recomputed here from the stored content), its corrections, and every simulated read that included it, with the grant that allowed the read.</p>
+{% if demo %}<p>{% if is_demo %}<a href="{% url 'ui:provenance' %}">Show your own records</a>{% else %}<a href="?who=demo">Show the DEMO profile (synthetic)</a>{% endif %}</p>{% endif %}
+<form method="get" class="stack">
+  {% if is_demo %}<input type="hidden" name="who" value="demo">{% endif %}
+  <div class="field">
+    <label for="cid">Record</label>
+    <select id="cid" name="cid">
+      {% for r in recent %}<option value="{{ r.cid }}"{% if r.cid == cid %} selected{% endif %}>{{ r.record_kind }}: {{ r }}</option>
+      {% empty %}<option value="">No records yet</option>{% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="primary">Show provenance</button>
+</form>
+{% if info %}
+<section aria-labelledby="rec-h">
+  <h2 id="rec-h">{{ info.kind }}</h2>
+  <dl class="flags">
+    <dt>CID</dt><dd><code class="cid">{{ info.rec.cid }}</code> {% if info.cid_ok %}<span class="flag flag-ok">matches its content</span>{% else %}<span class="flag flag-red">does not match its content</span>{% endif %}</dd>
+    <dt>Contributor</dt><dd>{{ who.handle }}</dd>
+    <dt>Status</dt><dd>{% if info.is_current %}current{% else %}superseded; current version <code class="cid">{{ info.current_cid|default:"none" }}</code>{% endif %}</dd>
+    <dt>Stored</dt><dd>{{ info.rec.created_at|date:"Y-m-d H:i" }} (creation #{{ info.rec.created_seq }})</dd>
+  </dl>
+  <h3>Corrections</h3>
+  {% if info.chain %}<ol>{% for s in info.chain %}<li><code class="cid">{{ s.old_cid }}</code> &rarr; <code class="cid">{{ s.new_cid }}</code>{% if s.reason %} ({{ s.reason }}){% endif %}, {{ s.created_at|date:"Y-m-d H:i" }}</li>{% endfor %}</ol>
+  {% else %}<p>Never corrected.</p>{% endif %}
+  <h3>Reads (ledger)</h3>
+  {% if info.reads %}
+  <ul class="grants">{% for row in info.reads %}
+    <li><span>#{{ row.e.seq }} {{ row.e.at|date:"Y-m-d H:i" }}: {{ row.recipient }}, "{{ row.e.purpose }}", {{ row.e.units }} simulated credit{{ row.e.units|pluralize }}<br>
+      <span class="note">Grant <code class="cid">{{ row.e.grant_cid }}</code>{% if row.grant %}, from {{ row.grant.start|date:"Y-m-d H:i" }}{% if row.grant.end %} to {{ row.grant.end|date:"Y-m-d H:i" }}{% endif %}{% if row.revocation %}, revoked {{ row.revocation.at|date:"Y-m-d H:i" }}{% endif %}{% endif %}. Event CID <code class="cid">{{ row.e.cid }}</code></span></span></li>
+  {% endfor %}</ul>
+  {% else %}<p>No simulated recipient has read this record.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}
