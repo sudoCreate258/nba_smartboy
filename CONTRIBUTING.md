@@ -62,6 +62,14 @@ Test fixtures use synthetic values only, never real personal data.
 5. Wait for CI and review from a code owner (see `.github/CODEOWNERS`).
 6. Record notable design choices in `docs/DECISIONS.md`.
 
+### Automated semantic review (credit budget)
+
+Kiro's semantic review runs **once per PR**, as a **single pass on one cheap model**: the
+`semantic_reviewer` agent launched alone (`agent://semantic_reviewer`, model Auto), never the
+multi-model recipe and never Opus. It reads the PR diff from a file (`git diff --output=...`). If it
+has not reported within **30 minutes** it is stopped and the PR goes ahead on the local gate and CI
+alone (noted in the PR). It is re-run only when the code changed materially after it.
+
 ## Conduct and security
 
 By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
