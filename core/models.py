@@ -691,6 +691,7 @@ class TrainingSession(ProvenancedRecord):
     """A strength or conditioning session (RP-style programming fields)."""
 
     record_kind = "training_session"
+    OMIT_IF_NULL = ("soreness",)  # added for the muscle estimate (025 Part C)
 
     class Location(models.TextChoices):
         GYM = "gym"
@@ -709,6 +710,8 @@ class TrainingSession(ProvenancedRecord):
         validators=[MinValueValidator(0), MaxValueValidator(10)],
     )
     notes = models.TextField(blank=True)
+    soreness = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(10)],
+                                                help_text="Overall soreness before the session, 0-10.")
 
     class Meta:
         ordering = ["-started_at"]
@@ -737,6 +740,13 @@ class TrainingSet(ProvenancedRecord):
 
     record_kind = "training_set"
     STOP_JOINT_PAIN = 2
+    # Added for the muscle estimate (025 Part C); null = not recorded, left out of the CID.
+    OMIT_IF_NULL = ("side", "rpe", "tempo", "rest_s")
+
+    class Side(models.TextChoices):
+        LEFT = "L"
+        RIGHT = "R"
+        BILATERAL = "bilateral"
 
     class MuscleGroup(models.TextChoices):
         CHEST = "chest"
@@ -768,6 +778,12 @@ class TrainingSet(ProvenancedRecord):
     joint_pain = models.PositiveSmallIntegerField(null=True, blank=True, validators=RATING_0_3)
     joint_pain_area = models.CharField(max_length=16, choices=DiscomfortCheck.Area.choices, null=True, blank=True)
     notes = models.TextField(blank=True)
+    side = models.CharField(max_length=9, choices=Side.choices, null=True, blank=True,
+                            help_text="L or R for a one-sided set; bilateral (or empty) for both sides.")
+    rpe = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True,
+                              validators=[MinValueValidator(0), MaxValueValidator(10)])
+    tempo = models.CharField(max_length=16, null=True, blank=True, help_text='e.g. "3-1-1-0".')
+    rest_s = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(3600)])
 
     # CID of the set this one corrects (set by the correction path); not a field.
     replaces_cid = None

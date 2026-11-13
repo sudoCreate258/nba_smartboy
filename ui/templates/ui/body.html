@@ -1,0 +1,17 @@
+{% extends "ui/base.html" %}
+{% block title %}Body (estimate) - Twin{% endblock %}
+{% block content %}
+<h1>Body map: week of {{ b.week_start|date:"Y-m-d" }}</h1>
+<p class="msg msg-warning" role="note"><strong>Estimated, not measured.</strong> Muscle shading is implied from logged sets (sets x reps x load x a weight per exercise in <code>twin/muscle_map.yaml</code>, whose sources the owner still has to fill in). It is a load gauge, not a medical assessment.</p>
+<p><a href="?week={{ prev|date:'Y-m-d' }}">Previous week</a> · <a href="?week={{ next|date:'Y-m-d' }}">Next week</a></p>
+<div class="chart-box">{{ b.svg|safe }}</div>
+{% if b.pains %}<h2>Pain flags</h2><ul>{% for p in b.pains %}<li>{{ p.area }} {{ p.score }}/10 ({{ p.source }})</li>{% endfor %}</ul>{% endif %}
+<h2>Imbalance flags (estimate)</h2>
+{% if b.flags %}<ul>{% for f in b.flags %}<li>{% if f.kind == "left_right" %}{{ f.muscles.0 }} left/right{% else %}{{ f.muscles.0 }} : {{ f.muscles.1 }}{% endif %}: {% if f.ratio is None %}only one side trained{% else %}ratio {{ f.ratio|floatformat:2 }}{% endif %} (band {{ f.band.0 }}-{{ f.band.1 }})</li>{% endfor %}</ul>
+{% else %}<p>None this week.</p>{% endif %}
+<h2>Estimated volume</h2>
+{% if b.ranked %}<ul>{% for m, v in b.ranked %}<li>{{ m }}: {{ v|floatformat:0 }} kg-reps</li>{% endfor %}</ul>
+{% else %}<p>No sets with a load this week.</p>{% endif %}
+{% if b.volume.unmapped %}<p class="note">Not in the muscle map (not counted): {% for e, n in b.volume.unmapped.items %}{{ e }} ({{ n }}){% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+{% if b.volume.no_load %}<p class="note">{{ b.volume.no_load }} set{{ b.volume.no_load|pluralize }} without a load (body weight) not counted.</p>{% endif %}
+{% endblock %}
